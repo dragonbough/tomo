@@ -1,0 +1,82 @@
+TOMO.PLAN
+
+#########
+timeline:
+#########
+
+phase 1: data 
+- data model implemented in SQLite
+- implement the DAG to represent todo and subtasks
+- implement recursive DFS for searching/sorting
+- implement 
+
+phase 2: todo
+- get the todo backend implementation working
+- implement frontend representation
+
+phase 3: buddy
+- get backend buddy data structure working
+- 
+
+phase 4: pomodoro
+- create simple pomodoro timer backend implementation -- time scheduling algorithm that takes the todos needed to be done and time given to do so and calculates the pomodoro timings / order of tasks based on todo difficulty
+- link with qtimer feature to allow for asynchronous timings
+- fully implement focus periods feature for frontend -- takes all current todos and produces a pomodoro timer that works on each one, based on difficulty and/or time given (can be indefinite)
+
+phase 5: polish
+
+###################
+how its gonna work:
+###################
+
+data.py | buddy.py | pomodoro.py | app.py | gui.py | tests.py
+
+data.py
+- features functions providing communication between program and SQLite database
+- passes data into app.py
+
+buddy.py
+- manages buddy system using FSMs
+- separate module that can be called by main app for buddy functionality
+
+pomodoro.py
+- manages pomodoro timer system
+- separate module called by main app for pomodoro functionality
+
+app.py 
+- receives data from data.py and uses them to fill up backend data structures
+- features functions allowing for the retrieval of data structures (e.g tasks, subtasks) and manipulation of data structures 
+
+gui.py
+- implements "views" of the data from app.py, within GUI interface in PyQt6
+
+tests.py 
+- runs unit tests for each module to ensure there are no bugs
+
+###########
+data model:
+###########
+
+SQLITE
+Todos(ID, Name, Difficulty, Completed, Points) 
+SubTodos(Parenthood, ChildTodoID)
+BuddyBaseStats(ID, Name, Health, Points, Strength, etc...)
+Buddy(ID, Name, Health, Points, Strength, etc...)
+BuddyItems(BuddyID, ItemID)
+Items(ID, ItemName, StatChange (e.g STR4, INT-1))
+PomodoroTimers(TodoID, ElapsedTime, StartTime, EndTime(?))
+
+JSON
+UserSettings(Name, Theme)
+
+##################
+main philosophies: 
+##################
+
+DBC -- each module should expect to return something and expect to receive something before doing so (post conditions and pre conditions) -- otherwise, throw errors
+
+error checking -- ANYTIME anything is wrong in the code, make sure it crashes -- complicated systems like these can build up unseen issues which are hard to debug
+
+user-focussed design -- make the interface easy to use and user first -- don't make it convoluted or complicated
+
+intelligent -- the program has to be smart enough to do what the player is thinking it should be able to do at any time
