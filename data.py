@@ -26,7 +26,7 @@ def retrieve_todo_data(*todo_ids : int) -> list[dict]:
 
 #updates todo data if its id already exists in db
 #otherwise creates new entries in db
-def update_todo_data(*todo_data : iter[dict]):
+def update_todo_data(*todo_data : list[dict]):
 
     existing_todos = []
     new_todos = []
