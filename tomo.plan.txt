@@ -39,29 +39,34 @@ phase 5: polish
 how its gonna work:
 ###################
 
-data.py | tomo.py | pomodoro.py | app.py | gui.py | tests.py
+data.py | tomo.py | pomodoro.py | todos.py | gui.py | tests.py | main.py
 
 data.py
-- features functions providing communication between program and SQLite database
-- passes data into app.py
+- retrieves/updates todo data, tomo data and pomodoro data from DB
+- retrieved data can be passed into the respective module for data structures needed 
 
 tomo.py
-- manages tomo system using FSMs
+- models tomo behaviours using FSMs
+- provides functions to manipulate tomo characteristics
 - separate module that can be called by main app for tomo functionality
 
 pomodoro.py
 - manages pomodoro timer system
 - separate module called by main app for pomodoro functionality
 
-app.py
+todos.py
 - receives data from data.py and uses them to fill up backend data structures
 - features functions allowing for the retrieval of data structures (e.g tasks, subtasks) and manipulation of data structures
+- callback recursive dfs algorithm
 
 gui.py
 - implements "views" of the data from app.py, within GUI interface in PyQt6
 
 tests.py
 - runs unit tests for each module to ensure there are no bugs
+
+main.py 
+- what initialises the entire program from 
 
 ###########
 data model:
@@ -79,6 +84,28 @@ PomodoroTimer(TodoID, ElapsedTime, StartTime, EndTime(?))
 JSON
 UserSettings(Name, Theme)
 
+
+################
+data structures:
+################
+
+Todos - DAG / task dependency graph
+- estimated time (derived from difficulty?) -- edge weights
+- id, int
+- name, str
+- difficulty, int
+- completed, bool
+- points, int
+
+Tomos - Finite state machine
+- current state, str 
+- transitions, dict
+- action, str / custom Action type
+- stats, dict
+
+Timers - custom data type / QTimer (?)
+
+
 ##################
 main philosophies:
 ##################
@@ -90,3 +117,5 @@ error checking -- ANYTIME anything is wrong in the code, make sure it crashes --
 user-focussed design -- make the interface easy to use and user first -- don't make it convoluted or complicated
 
 intelligent -- the program has to be smart enough to do whatever the player is thinking it should do at all times
+
+
