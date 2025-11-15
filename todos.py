@@ -15,6 +15,7 @@ class Todo():
         if self.parent:
             self.parent.adopt(self)
         self.completed = completed
+        self.children : list[Todo]
         self.children = []
         self.points = points
         self.time_created = datetime.now().timestamp()
@@ -175,6 +176,13 @@ class TodoList():
         todo.completed = completion
         for child in todo.children:
             self.complete_todo(child, completion)
+        if todo.parent:
+            self.check_if_completed(todo.parent)
+
+    #todo checks for completion based on whether all the children are completed or not
+    def check_if_completed(self, todo : Todo):
+        completed = not([child for child in todo.children if child.completed == False])
+        todo.completed = completed
 
     #formats all Todo data into a dictionary for DB
     def unpack_todos(self, *todos : Todo):
@@ -266,7 +274,7 @@ if __name__ == "__main__":
             user_input = input("\n[A] Create To-do  [X] Exit\n").lower()
             if user_input == "a":
                 todo_name = input("To-do Name: ")
-                todo_difficulty = int(input("To-do Difficulty: "))
+                todo_difficulty = int(input("To-do Difficulty: [1] Trivial  [2] Easy  [3] Hard  [4] Very Hard\n"))
                 user_todo_list.create_todo(name=todo_name, parent=None, difficulty=todo_difficulty)
 
         if selected_todo:
@@ -297,7 +305,10 @@ if __name__ == "__main__":
                         selected_todo.name = input("\nEdit To-do Name: ")
 
                     elif edit_option == "s":
-                        selected_todo.difficulty = int(input("\nEdit To-do Difficulty: "))
+                        todo_difficulty = -1
+                        while not(1 <= todo_difficulty <= 4):
+                            todo_difficulty = int(input("Edit To-do Difficulty: [1] Trivial  [2] Easy  [3] Hard  [4] Very Hard\n"))
+                        selected_todo.difficulty = todo_difficulty
 
                     elif edit_option == "d":
                         clear_screen()
@@ -340,12 +351,13 @@ if __name__ == "__main__":
                     choice = None
                     time_created = datetime.fromtimestamp(selected_todo.time_created).strftime("%Y/%m/%d, %H:%M:%S")
                     time_completed = datetime.fromtimestamp(selected_todo.time_completed).strftime("%Y/%m/%d, %H:%M:%S") if selected_todo.time_completed else None
+                    difficulties = ["Trivial", "Easy", "Hard", "Very Hard"]
 
                     while choice != "f":
 
                         clear_screen()
                         print(f"\033[1m{selected_todo.name}\033[0m")
-                        print(f"Time Created: {time_created}  Time Completed: {time_completed}  Difficulty: {selected_todo.difficulty}\n")
+                        print(f"Time Created: {time_created}  {f"Time Completed: {time_completed} " if time_completed else ""}Difficulty: {selected_todo.difficulty} ({difficulties[selected_todo.difficulty - 1]})\n")
                         choice = input("[F] Close\n").lower()
 
         if user_input == "x":
