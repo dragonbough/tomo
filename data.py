@@ -8,10 +8,16 @@ cursor = connection.cursor()
 
 #if db doesn't exist here, constructs db using schema commands
 if not os.path.isfile("tomo_data.db"):
-    cursor.executescript("""CREATE TABLE Todo (ID Integer PRIMARY KEY AUTOINCREMENT, Name VARCHAR NOT NULL, Difficulty INTEGER, Completed INTEGER CHECK (Completed == 1 OR Completed == 0),
- Points INTEGER, TimeCreated INTEGER NOT NULL, TimeCompleted INTEGER, ParentID INTEGER REFERENCES Todo (ID));""")
+    cursor.executescript("""CREATE TABLE sqlite_sequence(name,seq);
+CREATE TABLE Todo (ID Integer PRIMARY KEY AUTOINCREMENT, Name VARCHAR NOT NULL, Difficulty INTEGER, Completed INTEGER CHECK (Completed == 1 OR Completed == 0), Points INTEGER, TimeCreated INTEGER NOT NULL, TimeCompleted INTEGER, ParentID INTEGER REFERENCES Todo (ID));
+CREATE TABLE TomoStats(ID INTEGER PRIMARY KEY, BaseName VARCHAR(45) NOT NULL);
+CREATE TABLE TomoLevelingStats(TomoID INTEGER NOT NULL, BondLevel INTEGER NOT NULL, RequiredXP INTEGER NOT NULL, Sprite BLOB, HP INTEGER NOT NULL, FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
+CREATE TABLE Item(ID INTEGER PRIMARY KEY, ItemName VARCHAR(45) NOT NULL, Sprite BLOB, Effect VARCHAR);
+CREATE TABLE UserTomo(TomoID INTEGER PRIMARY KEY, Name VARCHAR(45) NOT NULL, HP INTEGER NOT NULL, XP INTEGER NOT NULL, BondLevel INTEGER NOT NULL, FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
+CREATE TABLE UserTomoItem(TomoID INTEGER NOT NULL, ItemID INTEGER NOT NULL, FOREIGN KEY (TomoID) REFERENCES TomoStats(ID), FOREIGN KEY (ItemID) REFERENCES Item(ID));""")
+    #write-ahead logging -- increased performance benefit but won't work on network filesystems or read only DBs
+    cursor.execute("PRAGMA journal_mode=WAL;")
     connection.commit()
-
 
 
 ### TODO DATA ###
