@@ -6,7 +6,7 @@ from typing import Literal
 
 class Todo():
 
-    def __init__(self, name : str, todo_id : int = None, difficulty : int = None, parent = None, completed : bool = False, points : int = 0, time_completed : int = None):
+    def __init__(self, name : str, todo_id : int = None, difficulty : int = None, parent = None, completed : bool = False, points : int = 0, time_created : int = None, time_completed : int = None):
         self.name = name
         self.todo_id = todo_id
         self.difficulty = difficulty
@@ -18,7 +18,10 @@ class Todo():
         self.children : list[Todo]
         self.children = []
         self.points = points
-        self.time_created = datetime.now().timestamp()
+        if not time_created:
+            self.time_created = datetime.now().timestamp()
+        else:
+            self.time_created = time_created
         self.time_completed = time_completed
         self.deleted = False
         self.local = False
@@ -49,9 +52,10 @@ class TodoList():
             name = todo_datum["name"]
             difficulty = int(todo_datum["difficulty"])
             completed = True if todo_datum["completed"] else False
+            time_created = int(todo_datum["timecreated"])
             time_completed = todo_datum["timecompleted"]
 
-            todo = Todo(name=name, todo_id=todo_id, difficulty=difficulty, completed=completed, time_completed=time_completed)
+            todo = Todo(name=name, todo_id=todo_id, difficulty=difficulty, completed=completed, time_created=time_created, time_completed=time_completed)
 
             #adds itself under parent id
             #so it can be adopted later
