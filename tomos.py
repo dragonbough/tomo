@@ -1,3 +1,5 @@
+import data
+
 #class defining a state in a state machine
 class State():
 
@@ -9,7 +11,11 @@ class State():
 
     #executes the behaviour's function
     def execute(self, *args):
+        # print(f"Executing State: {self.name}")
+        # print(f"Executing State Transitions: {self.transitions}")
+        # print(f"Execution:", end=" ")
         self.callback(*args)
+        return
 
 #class defining the finite state machine
 class StateMachine():
@@ -27,7 +33,7 @@ class StateMachine():
         return self.states.values()
 
     #retrieves a state given its name
-    def get_state(self, state_name : str):
+    def get_state(self, state_name : str) -> State:
         return self.states[state_name]
 
     #adds state to the finite state machine
@@ -35,13 +41,14 @@ class StateMachine():
         self.states[state.name] = state
         if len(self.states) == 1:
             self.start_state = state
+            print(f"Start State: {state.name}")
 
     #adds transition between two states to FSM
     def add_transition(self, initial_state : State, transition_name : str, final_state : State):
         if transition_name not in initial_state.transitions:
             initial_state.transitions[transition_name] = final_state
-            print(f"State Transitions: {initial_state.transitions}")
-            print(f"Initial State: {initial_state.name}, Transition: {transition_name}, Final State: {final_state.name}")
+            # print(f"State Transitions: {initial_state.transitions}")
+            # print(f"Initial State: {initial_state.name}, Transition: {transition_name}, Final State: {final_state.name}")
         else:
             ValueError(f"Transition '{transition_name}' already exists for state")
 
@@ -49,7 +56,7 @@ class StateMachine():
     def delete_state(self, *states : State):
         to_delete = []
         for state_name in self.states:
-            if self.states[state_name] in states:
+            if self.get_state(state_name) in states:
                 to_delete.append(state_name)
         for state_name in to_delete:
             self.states.pop(state_name)
@@ -63,145 +70,258 @@ class StateMachine():
 
     #simulates a single step of the state machine
     def tick(self, input : str = None):
+        self.current_state : State
         self.current_state.execute()
         if input:
             self.transition(input)
 
+
+class BaseTomo():
+
+    def __init__(self, tomo_id : int, base_name : str, levels : dict[dict[str : int]]):
+        self.tomo_id = tomo_id
+        self.base_name = base_name
+        # {level : {"hp" : 1, "xp" : 1, "sprite" : File}}
+        self.levels = levels
+
 #tomo is an agent that relies on a finite state machine for its behaviours
 class Tomo():
 
-    def __init__(self, name : str, hp : int, xp : int):
+    def __init__(self, name : str, hp : int, xp : int, level : int, base_tomo : BaseTomo):
+        self.base_tomo = base_tomo
         self.name = name
         self.hp = hp
         self.xp = xp
+        self.bond = level
         self.fsm = StateMachine()
+
+# collection of Tomos
+class UserTomos():
+
+    # factory method to retrieve all of the tomos that belong to user in the DB
+    @staticmethod
+    def get_user_tomos():
+        tomos = []
+        base_tomos = {}
+
+        user_tomo_data, base_tomo_data = data.retrieve_tomo_data()
+
+        # creates base tomos
+        for base_tomo_id in base_tomo_data:
+            base_name = base_tomo_data[base_tomo_id]["basename"]
+            levels = base_tomo_data[base_tomo_id]["levels"]
+            base_tomo = BaseTomo(tomo_id=base_tomo_id, base_name=base_name, levels=levels)
+            print("BaseTomo retrieved!")
+            print(f"BaseTomo Name: {base_tomo.base_name}:")
+            print(f"{base_tomo.base_name} ID: {base_tomo.tomo_id}")
+            print(f"{base_tomo.base_name} Levels: {base_tomo.levels}")
+            base_tomos[base_tomo.tomo_id] = base_tomo
+
+        print("")
+
+        for tomo_datum in user_tomo_data:
+
+            # creating the user tomo
+            name = tomo_datum["name"]
+            tomo_id = int(tomo_datum["tomoid"])
+            hp = int(tomo_datum["hp"])
+            xp = int(tomo_datum["xp"])
+            bond_level = int(tomo_datum["bondlevel"])
+            user_tomo = Tomo(name=name, hp=hp, xp=xp, level=bond_level, base_tomo=base_tomos[tomo_id])
+
+            print("UserTomo retrieved!")
+            print(f"UserTomo Name: {user_tomo.name}:")
+            print(f"{user_tomo.name} HP: {user_tomo.hp}")
+            print(f"{user_tomo.name} XP: {user_tomo.xp}")
+            print(f"{user_tomo.name} Bond Level: {user_tomo.bond}")
+            print(f"{user_tomo.name}'s Base Tomo Name: {user_tomo.base_tomo.base_name}")
+
+            tomos.append(user_tomo)
+
+        return UserTomos(tomos=tomos)
+
+
+    def __init__(self, tomos : list[Tomo]):
+        self.tomos = {}
+        for tomo in tomos:
+            self.tomos[tomo.name] = tomo
+        self.current_tomo = None
+
+    def get_tomos(self):
+        return self.tomos.values()
+
+    def get_tomo(self, tomo_id):
+        return self.tomos[tomo_id]
+
+    def select_tomo(self, tomo : Tomo):
+        if tomo in self.get_tomos():
+            self.current_tomo = tomo
+        else:
+            raise KeyError(f"Tomo {tomo.name} not in UserTomos")
+
 
 
 if __name__ == "__main__":
 
-    import networkx as nx
-    import matplotlib.pyplot as plt
-    import os
+    import sys
 
-    def clear_terminal():
-        # For Windows
-        if os.name == 'nt':
-            _ = os.system('cls')
-        # For macOS and Linux
-        else:
-            _ = os.system('clear')
+    if len(sys.argv) == 1:
 
-    def display_states(fsm : StateMachine):
+        user_tomos = UserTomos.get_user_tomos()
+        print("\nData retrieval successful! :D")
 
-        # converting the state machine object into an adjacency list for displaying as a network
-        adjacency_list = {}
-        for state_name in fsm.states:
-            # print(state_name)
-            adjacency_list[state_name] = [state.name for state in fsm.states[state_name].transitions.values()]
+    elif len(sys.argv) > 1 and sys.argv[1] == "fsm":
 
-        # print(f"Adjacency List: {adjacency_list}")
+        import networkx as nx
+        import matplotlib.pyplot as plt
+        import os
+        import time
 
-        edge_labels = {}
+        def clear_terminal():
+            # For Windows
+            if os.name == 'nt':
+                _ = os.system('cls')
+            # For macOS and Linux
+            else:
+                _ = os.system('clear')
 
-        # converting the transitions for each state into format for displaying edge labels in network
-        for state_name in fsm.states:
-            for transition in fsm.states[state_name].transitions:
-                final_state_name = fsm.states[state_name].transitions[transition].name
-                edge_labels[(state_name, final_state_name)] = transition
+        def display_states(fsm : StateMachine):
 
-        # print(f"Edge Labels: {edge_labels}")
+            # converting the state machine object into an adjacency list for displaying as a network
+            adjacency_list = {}
+            for state_name in fsm.states:
+                adjacency_list[state_name] = [state.name for state in fsm.get_state(state_name).transitions.values()]
 
-        #directional graph allowing parellel edges created using networkx and the adjacency list made
-        fsm_graph = nx.MultiDiGraph(adjacency_list)
+            # print(f"Adjacency List: {adjacency_list}")
 
-        # current state is green while everything else is red
-        colours = ["red" if fsm.current_state and state_name != fsm.current_state.name else "limegreen" for state_name in fsm_graph]
-        plt.clf()
+            edge_labels = {}
 
-        node_size = 1500
-        ring_node_size = 500 + node_size
+            # converting the transitions for each state into format for displaying edge labels in network
+            for state_name in fsm.states:
+                for transition in fsm.get_state(state_name).transitions:
+                    final_state_name = fsm.get_state(state_name).transitions[transition].name
+                    edge_labels[(state_name, final_state_name)] = transition
 
-        # defines the layout of the network
-        pos = nx.arf_layout(fsm_graph)
+            # print(f"Edge Labels: {edge_labels}")
 
-        # display the start state with a ring around it (drawing a larger node below)
-        if fsm.start_state:
-            nx.draw_networkx_nodes(fsm_graph, node_size=ring_node_size, pos=pos, nodelist=[fsm.start_state.name])
+            #directional graph allowing parellel edges created using networkx and the adjacency list made
+            fsm_graph = nx.MultiDiGraph(adjacency_list)
 
-        # draws the network via matplotlib
-        nx.draw_networkx(fsm_graph, node_size=node_size, node_color=colours, pos=pos, connectionstyle="arc3,rad=0.1")
+            # current state is green while everything else is red
+            colours = ["limegreen" if fsm.current_state and state_name == fsm.current_state.name else "red" for state_name in fsm_graph]
+            plt.clf()
 
-        if edge_labels:
-            nx.draw_networkx_edge_labels(G=fsm_graph, pos=pos, edge_labels=edge_labels, label_pos=0.3, connectionstyle="arc3,rad=0.1")
+            node_size = 1500
 
-        plt.show(block=False)
+            # defines the layout of the network
+            pos = nx.arf_layout(fsm_graph)
 
-    running = True
+            # draws the network via matplotlib
+            nx.draw_networkx(fsm_graph, node_size=node_size, node_color=colours, pos=pos, connectionstyle="arc3,rad=0.1")
 
-    tomo = Tomo("test", 100, 100)
-    # idle_behaviour = State("idle", lambda : print("Tomo is idle"))
-    # tomo.fsm.add_state("idle", idle_behaviour)
-    fsm_input = None
-    update = True
-    selected_state = None
+            if edge_labels:
+                nx.draw_networkx_edge_labels(G=fsm_graph, pos=pos, edge_labels=edge_labels, label_pos=0.3, connectionstyle="arc3,rad=0.1")
 
-    while running == True:
+            plt.show(block=False)
 
-        clear_terminal()
-        #if graph updated then things should update
-        if update:
-            display_states(fsm=tomo.fsm)
-            update = False
+        running = True
 
-        print(f"Selected State: {selected_state.name if selected_state else None}")
-        if not selected_state:
-            user_input = input("[1] Add State  [3] Simulate Tick  [4] Exit\n").lower()
-        else:
-            user_input = input("[1] Add State  [2] Transition to State  [3] Simulate Tick  [4] Exit\n").lower()
+        user_tomos = UserTomos.get_user_tomos()
+        user_tomos.get_tomo("")
+        fsm_input = None
+        update = True
+        selected_state = None
 
-        if user_input.isdecimal():
-            user_input = int(user_input)
+        while running == True:
 
-            if user_input == 1:
-                state_name = input("State Name: ")
-                action = input("What should the behaviour say?: ")
-                state = State(name=state_name, callback=lambda : print(action))
-                tomo.fsm.add_state(state=state)
-                # transition_name = input("State Transition Name: ")
-                # tomo.fsm.add_transition(initial_state=tomo.fsm.current_state, transition_name=transition_name, final_state=state)
-                update = True
+            clear_terminal()
+            #if graph updated then things should update
+            if update:
+                display_states(fsm=tomo.fsm)
+                update = False
 
-            elif user_input == 2 and selected_state:
+            user_input = ""
+            selected_user_input = ""
 
-                # lists all of the other (non-selected and non-connected) states with an index for the user to select
-                other_state_names = [state.name for state in tomo.fsm.get_states() if state != selected_state and state not in selected_state.transitions.values()]
+            print(f"Selected State: {selected_state.name if selected_state else None}")
+            print(f"Current State (Tick Sim): {tomo.fsm.current_state.name if tomo.fsm.current_state else None}")
 
-                for i in range(len(other_state_names)):
-                    print(f"[{i+1}] {other_state_names[i]}")
+            if not selected_state:
+                user_input = input("[1] Add State  [2] Simulate Tick  [3] Exit\n").lower()
+            else:
+                selected_user_input = input("[1] Transition to State  [2] Simulate Tick  [3] Deselect  [4] Exit\n").lower()
 
-                transition_index = int(input("Enter index: "))
+            if user_input.isdecimal() or selected_user_input.isdecimal():
+                if user_input:
+                    user_input = int(user_input)
+                if selected_user_input:
+                    selected_user_input = int(selected_user_input)
 
-                # creates transition between the current state and the user
-                if 1 <= transition_index <= len(tomo.fsm.states):
-                    connecting_state = tomo.fsm.states[other_state_names[transition_index - 1]]
-                    transition_name = input("State Transition: ")
-                    tomo.fsm.add_transition(selected_state, transition_name, connecting_state)
-                update = True
+                # adding states
+                if user_input == 1:
+                    state_name = input("State Name: ")
+                    action = input("What should the behaviour say?: ")
+                    # callback in lambda form MUST be written like this -- writing lambda : print(action) does not store action locally
+                    # rather, it just points to the action variable which changes on every loop
+                    callback = lambda x=action : print(x)
+                    state = State(name=state_name, callback=callback)
+                    tomo.fsm.add_state(state=state)
 
-            elif user_input == 3:
-                add_input = input("Input? [Y/N]: ").lower()
-                if add_input == "y":
-                    fsm_input = input("Input: ")
-                try:
-                    tomo.fsm.tick(fsm_input)
-                except KeyError:
-                    print("Invalid FSM input")
-                fsm_input = None
-                update = True
+                    update = True
 
-            elif user_input == 4:
-                running = False
+                # simulating a tick
+                elif (user_input == 2 or selected_user_input == 2) and tomo.fsm.states:
 
-        elif user_input in tomo.fsm.states:
-            selected_state = tomo.fsm.get_state(user_input)
-            tomo.fsm.current_state = selected_state
+                    # if there isnt a current state in the FSM, start from the start state of the FSM
+                    if not tomo.fsm.current_state:
+                        tomo.fsm.current_state = tomo.fsm.start_state
+
+                    if selected_user_input:
+                        start_from_selected = input(f"Start from selected state ({selected_state.name})? [Y/N]: ").lower()
+                        if start_from_selected == "y":
+                            tomo.fsm.current_state = selected_state
+
+                    add_input = input("Input? [Y/N]: ").lower()
+                    if add_input == "y":
+                        fsm_input = input("Input: ")
+                    try:
+                        tomo.fsm.tick(fsm_input)
+                    except KeyError:
+                        print("Invalid FSM input")
+                    else:
+                        time.sleep(2)
+
+                    fsm_input = None
+                    update = True
+
+                elif user_input == 3 or selected_user_input == 4:
+                    running = False
+
+                # transitioning to another state
+                elif selected_user_input == 1:
+
+                    # lists all of the other (non-selected and non-connected) states with an index for the user to select
+                    other_state_names = [state.name for state in tomo.fsm.get_states() if state != selected_state and state not in selected_state.transitions.values()]
+
+                    for i in range(len(other_state_names)):
+                        print(f"[{i+1}] {other_state_names[i]}")
+
+                    transition_index = int(input("Enter index: "))
+
+                    # creates transition between the current state and the user
+                    if 1 <= transition_index <= len(other_state_names):
+                        connecting_state = tomo.fsm.get_state(other_state_names[transition_index - 1])
+                        transition_name = input("State Transition: ")
+                        tomo.fsm.add_transition(selected_state, transition_name, connecting_state)
+                        update = True
+
+                # deselects the currently selected state
+                elif selected_user_input == 3:
+                    selected_state = None
+
+
+            elif user_input in tomo.fsm.states:
+                selected_state = tomo.fsm.get_state(user_input)
+
+            elif selected_user_input in tomo.fsm.states:
+                selected_state = tomo.fsm.get_state(selected_user_input)
