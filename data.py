@@ -19,21 +19,25 @@ CREATE TABLE UserTomoItem(TomoID INTEGER NOT NULL, ItemID INTEGER NOT NULL, FORE
     cursor.execute("PRAGMA journal_mode=WAL;")
     connection.commit()
 
+# generates the SQL bindings for variably sized data
+def generate_bindings(data):
+    if len(data) == 1:
+        bindings = "?"
+    else:
+        bindings = "?, " * (len(data) - 1) + "?"
+    return bindings
 
 ### TODO DATA ###
 
 #retrieve todo data based on id, or if not given, retrieve all todos from DB
 def retrieve_todo_data(*todo_ids : int) -> list[dict]:
     if todo_ids:
-        if len(todo_ids) == 1:
-            bindings = "?"
-        else:
-            bindings = "?, " * (len(todo_ids) -1) + "?"
+        bindings = generate_bindings(todo_ids)
         cursor.execute(f"SELECT * FROM Todo WHERE ID in ({bindings})", todo_ids)
-        todo_data = cursor.fetchall()
     else:
         cursor.execute("SELECT * FROM Todo")
-        todo_data = cursor.fetchall()
+    todo_data = cursor.fetchall()
+
     return todo_data
 
 #updates todo data if its id already exists in db
@@ -102,10 +106,7 @@ def dfs_modify_todo_data(datum : dict, visited : list, new_parent_id : int, heir
 def delete_todo_data(*todo_ids : int):
 
     if todo_ids:
-        if len(todo_ids) == 1:
-            bindings = "?"
-        else:
-            bindings = "?, " * (len(todo_ids) -1) + "?"
+        bindings = generate_bindings(todo_ids)
         cursor.execute(f"DELETE FROM Todo WHERE ID in ({bindings})", todo_ids)
         connection.commit()
 
@@ -118,7 +119,51 @@ def delete_todo_data(*todo_ids : int):
         connection.commit()
 
 
-
 ### TOMO DATA ###
 
-#retrieve all tomo data
+#tomo_ids are the ids of the base tomo -- user can only have one tomo of each type
+#retrieves user tomos and their base tomos, sending them both as dicts in a tuple
+def retrieve_tomo_data(*tomo_ids : int) -> tuple[list[dict], dict]:
+    # if ids are supplied retrieve user tomo data and base tomo data that matches those ids
+    if tomo_ids:
+        bindings = generate_bindings(tomo_ids)
+        cursor.execute(f"SELECT * FROM UserTomo WHERE TomoID in ({bindings})", tomo_ids)
+        user_tomo_data = cursor.fetchall()
+        # retrieving the name, bondlevel, requiredxp, sprite, and hp from the tomostats and tomolevelingstats tables
+        # multiple leveling stats for each id -- leveling stats appended to
+        cursor.execute(f"""SELECT TomoStats.ID, TomoStats.BaseName, TomoLevelingStats.BondLevel, TomoLevelingStats.RequiredXP, TomoLevelingStats.Sprite, TomoLevelingStats.HP
+                       FROM TomoLevelingStats
+                       INNER JOIN TomoStats ON TomoLevelingStats.TomoID=TomoStats.ID
+                       WHERE TomoStats.ID IN ({bindings})""", (tomo_ids))
+        base_tomo_data = cursor.fetchall()
+
+    # if ids are not supplied retrieve ALL data
+    else:
+        cursor.execute("SELECT * FROM UserTomo")
+        user_tomo_data = cursor.fetchall()
+
+        cursor.execute(f"""SELECT TomoStats.ID, TomoStats.BaseName, TomoLevelingStats.BondLevel, TomoLevelingStats.RequiredXP, TomoLevelingStats.Sprite, TomoLevelingStats.HP
+                       FROM TomoLevelingStats
+                       INNER JOIN TomoStats ON TomoLevelingStats.TomoID=TomoStats.ID""")
+
+        base_tomo_data = cursor.fetchall()
+
+    organised_base_tomo_data = {}
+
+    #organises the base tomo data into a neat dictionary of the form: {tomo_id : {"basename" : basename, "levels" : { level : {"required_xp" : required_xp, "hp" : hp} }}}
+    for base_tomo_datum in base_tomo_data:
+        base_name = base_tomo_datum["basename"]
+        base_id = int(base_tomo_datum["id"])
+        level = int(base_tomo_datum["bondlevel"])
+        required_xp = int(base_tomo_datum["requiredxp"])
+        hp = int(base_tomo_datum["hp"])
+
+        levels = {level : {"required_xp" : required_xp, "hp" : hp}}
+        if base_id not in organised_base_tomo_data:
+            organised_base_tomo_data[base_id] = {"basename" : base_name, "levels" : levels}
+        else:
+            organised_base_tomo_data[base_id]["levels"] = levels
+
+    # print(organised_base_tomo_data)
+
+    return user_tomo_data, organised_base_tomo_data
