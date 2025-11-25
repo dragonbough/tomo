@@ -3,6 +3,7 @@ from datetime import datetime
 import sys
 import os
 from typing import Literal
+import events
 
 class Todo():
 
@@ -178,6 +179,11 @@ class TodoList():
         if completion == None:
             completion = not todo.completed
         todo.completed = completion
+
+        # triggers event declaring that a todo was completed, passing in the todo as argument
+        if todo.completed == True:
+            events.todo_channel.get_event("TODO_COMPLETED").trigger(todo)
+
         for child in todo.children:
             self.complete_todo(child, completion)
         if todo.parent:
