@@ -1,4 +1,5 @@
 import data
+import events
 
 #class defining a state in a state machine
 class State():
@@ -78,11 +79,18 @@ class StateMachine():
 
 class BaseTomo():
 
-    def __init__(self, tomo_id : int, base_name : str, levels : dict[dict[str : int]]):
+    def __init__(self, tomo_id : int, base_name : str, levels : dict[int : dict[str : int]]):
         self.tomo_id = tomo_id
         self.base_name = base_name
         # {level : {"hp" : 1, "xp" : 1, "sprite" : File}}
         self.levels = levels
+
+    def check_for_level(self, xp : int):
+        for level in self.levels:
+            level : int
+            current_level = level
+            if level["xp"] > xp:
+                return current_level
 
 #tomo is an agent that relies on a finite state machine for its behaviours
 class Tomo():
@@ -92,8 +100,23 @@ class Tomo():
         self.name = name
         self.hp = hp
         self.xp = xp
-        self.bond = level
+        self.bond_level = level
         self.fsm = StateMachine()
+
+    def get_base_hp(self) -> int:
+        return self.base_tomo.levels[self.bond_level]["hp"]
+
+    def check_for_level(self):
+        return self.base_tomo.check_for_level(self.xp)
+
+    def increase_xp(self, amount : int):
+        self.xp += amount
+        print(f"{self.name}'s XP increased by {amount}!")
+        new_level = self.check_for_level()
+        if new_level > self.bond_level:
+            self.bond_level = new_level
+            print(f"{self.name}'s BOND LVL increased to {self.bond_level}")
+
 
 # collection of Tomos
 class UserTomos():
@@ -111,10 +134,10 @@ class UserTomos():
             base_name = base_tomo_data[base_tomo_id]["basename"]
             levels = base_tomo_data[base_tomo_id]["levels"]
             base_tomo = BaseTomo(tomo_id=base_tomo_id, base_name=base_name, levels=levels)
-            print("BaseTomo retrieved!")
-            print(f"BaseTomo Name: {base_tomo.base_name}:")
-            print(f"{base_tomo.base_name} ID: {base_tomo.tomo_id}")
-            print(f"{base_tomo.base_name} Levels: {base_tomo.levels}")
+            # print("BaseTomo retrieved!")
+            # print(f"BaseTomo Name: {base_tomo.base_name}:")
+            # print(f"{base_tomo.base_name} ID: {base_tomo.tomo_id}")
+            # print(f"{base_tomo.base_name} Levels: {base_tomo.levels}")
             base_tomos[base_tomo.tomo_id] = base_tomo
 
         print("")
@@ -129,12 +152,12 @@ class UserTomos():
             bond_level = int(tomo_datum["bondlevel"])
             user_tomo = Tomo(name=name, hp=hp, xp=xp, level=bond_level, base_tomo=base_tomos[tomo_id])
 
-            print("UserTomo retrieved!")
-            print(f"UserTomo Name: {user_tomo.name}:")
-            print(f"{user_tomo.name} HP: {user_tomo.hp}")
-            print(f"{user_tomo.name} XP: {user_tomo.xp}")
-            print(f"{user_tomo.name} Bond Level: {user_tomo.bond}")
-            print(f"{user_tomo.name}'s Base Tomo Name: {user_tomo.base_tomo.base_name}")
+            # print("UserTomo retrieved!")
+            # print(f"UserTomo Name: {user_tomo.name}:")
+            # print(f"{user_tomo.name} HP: {user_tomo.hp}")
+            # print(f"{user_tomo.name} XP: {user_tomo.xp}")
+            # print(f"{user_tomo.name} Bond Level: {user_tomo.bond_level}")
+            # print(f"{user_tomo.name}'s Base Tomo Name: {user_tomo.base_tomo.base_name}")
 
             tomos.append(user_tomo)
 
@@ -144,14 +167,18 @@ class UserTomos():
     def __init__(self, tomos : list[Tomo]):
         self.tomos = {}
         for tomo in tomos:
-            self.tomos[tomo.name] = tomo
+            self.tomos[tomo.base_tomo.tomo_id] = tomo
         self.current_tomo = None
+
+        # registers xp increase of selected tomo to the todo completion event
+        func = lambda todo : self.current_tomo.increase_xp(todo.difficulty) if self.current_tomo else print("No tomo selected")
+        events.todo_channel.get_event("TODO_COMPLETED").register(func)
 
     def get_tomos(self):
         return self.tomos.values()
 
-    def get_tomo(self, tomo_id):
-        return self.tomos[tomo_id]
+    def get_tomo(self, base_tomo_id : int):
+        return self.tomos[base_tomo_id]
 
     def select_tomo(self, tomo : Tomo):
         if tomo in self.get_tomos():
@@ -160,30 +187,67 @@ class UserTomos():
             raise KeyError(f"Tomo {tomo.name} not in UserTomos")
 
 
-
 if __name__ == "__main__":
 
     import sys
+    import os
 
-    if len(sys.argv) == 1:
+    def clear_terminal():
+        # For Windows
+        if os.name == 'nt':
+            _ = os.system('cls')
+        # For macOS and Linux
+        else:
+            _ = os.system('clear')
+
+    if len(sys.argv) > 1 and sys.argv[1] == "stats":
 
         user_tomos = UserTomos.get_user_tomos()
-        print("\nData retrieval successful! :D")
+        # print("\nData retrieval successful! :D")
+
+        # displays CLI tomo stats
+        def display_tomo_stats(tomo : Tomo):
+            print(f"{tomo.name}'s Stats:")
+
+            print(f"BOND LVL: {tomo.bond_level} ({tomo.xp} XP)")
+
+            base_hp = tomo.get_base_hp()
+            max_bar_length = 10
+            bar_length = int(tomo.hp / base_hp * max_bar_length)
+            empty_bar_length = max_bar_length - bar_length
+            print(f"HP: |{bar_length * "❚" + (empty_bar_length * " ")}| {tomo.hp}/{base_hp}")
+
+        running = True
+
+        while running:
+
+            tomo_id = ""
+            valid = False
+            while not valid:
+                clear_terminal()
+                for tomo in user_tomos.get_tomos():
+                    tomo : Tomo
+                    print(f"[{tomo.base_tomo.tomo_id}] {tomo.name}")
+                tomo_id = input("Select Tomo ([E] to exit): ")
+                if tomo_id.isdecimal() and int(tomo_id) in user_tomos.tomos:
+                    valid = True
+                elif tomo_id.lower() == "e":
+                    break
+
+            if not valid:
+                running = False
+            else:
+                clear_terminal()
+                tomo = user_tomos.get_tomo(int(tomo_id))
+                display_tomo_stats(tomo=tomo)
+                input("")
+
 
     elif len(sys.argv) > 1 and sys.argv[1] == "fsm":
 
         import networkx as nx
         import matplotlib.pyplot as plt
-        import os
         import time
-
-        def clear_terminal():
-            # For Windows
-            if os.name == 'nt':
-                _ = os.system('cls')
-            # For macOS and Linux
-            else:
-                _ = os.system('clear')
 
         def display_states(fsm : StateMachine):
 
@@ -227,7 +291,7 @@ if __name__ == "__main__":
         running = True
 
         user_tomos = UserTomos.get_user_tomos()
-        user_tomos.get_tomo("")
+        tomo = user_tomos.get_tomo(1)
         fsm_input = None
         update = True
         selected_state = None
@@ -243,6 +307,7 @@ if __name__ == "__main__":
             user_input = ""
             selected_user_input = ""
 
+            print(f"Tomo: {tomo.name}")
             print(f"Selected State: {selected_state.name if selected_state else None}")
             print(f"Current State (Tick Sim): {tomo.fsm.current_state.name if tomo.fsm.current_state else None}")
 
