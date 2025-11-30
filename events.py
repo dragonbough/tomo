@@ -12,11 +12,11 @@ class Observable():
 
     # triggers all of the registered functions
     def trigger(self, *event_args):
-        callback_number = len(self.callbacks)
-        print(f"Executing {callback_number} callback{"s" if callback_number > 1 or callback_number == 0 else ""}...")
+        # callback_number = len(self.callbacks)
+        # print(f"Executing {callback_number} callback{"s" if callback_number > 1 or callback_number == 0 else ""}...")
         for callback in self.callbacks:
             callback(*event_args)
-        time.sleep(1)
+        # time.sleep(1)
 
 class Channel():
 
@@ -42,3 +42,4 @@ tomo_channel = Channel()
 # channel for events from pomos.py
 pomo_channel = Channel()
 pomo_channel.create_event("TIMER_COMPLETED")
+pomo_channel.create_event("TIMER_ITERATED")
