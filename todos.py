@@ -284,7 +284,7 @@ if __name__ == "__main__":
             user_input = input("\n[A] Create To-do  [X] Exit\n").lower()
             if user_input == "a":
                 todo_name = input("To-do Name: ")
-                todo_difficulty = int(input("To-do Difficulty: [1] Trivial  [2] Easy  [3] Hard  [4] Very Hard\n"))
+                todo_difficulty = int(input("To-do Difficulty: [1] Trivial  [2] Easy  [3] Normal  [4] Hard\n"))
                 user_todo_list.create_todo(name=todo_name, parent=None, difficulty=todo_difficulty)
 
         if selected_todo:
@@ -304,7 +304,7 @@ if __name__ == "__main__":
                     todo_name = input("To-do Name: ")
                     todo_difficulty = -1
                     while not(1 <= todo_difficulty <= 4):
-                        todo_difficulty = int(input("To-do Difficulty: [1] Trivial  [2] Easy  [3] Hard  [4] Very Hard\n"))
+                        todo_difficulty = int(input("To-do Difficulty: [1] Trivial  [2] Easy  [3] Normal  [4] Hard\n"))
                     user_todo_list.create_todo(name=todo_name, parent=selected_todo, difficulty=todo_difficulty)
 
 
@@ -317,7 +317,7 @@ if __name__ == "__main__":
                     elif edit_option == "s":
                         todo_difficulty = -1
                         while not(1 <= todo_difficulty <= 4):
-                            todo_difficulty = int(input("Edit To-do Difficulty: [1] Trivial  [2] Easy  [3] Hard  [4] Very Hard\n"))
+                            todo_difficulty = int(input("Edit To-do Difficulty: [1] Trivial  [2] Easy  [3] Normal  [4] Hard\n"))
                         selected_todo.difficulty = todo_difficulty
 
                     elif edit_option == "d":
