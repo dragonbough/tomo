@@ -1,5 +1,6 @@
 from threading import (Timer, Event)
 import events
+import data
 
 # right2clicky on StackOverflow --https://stackoverflow.com/a/48741004
 # Timer that iterates before executing function -- has its own thread
@@ -76,17 +77,121 @@ class BaseTimer():
 # object consisting of two timers -- current timer is dependent on pomodoro focus mode
 class _PomodoroTimer():
 
-    def __init__(self, focus_duration : int, rest_duration : int):
-        # timers stored in dictionary with the current focus mode as the key
+    def __init__(self, difficulty : int = 1):
+
+        # difficulties range from 1 to 4:
+        # 1: Trivial  2: Easy  3: Normal  4: Hard
+
+        if not(1 <= difficulty <= 4):
+            raise ValueError("Invalid difficulty value as argument for PomodoroTimer")
+
+        self.difficulties = {}
+        self.difficulties : dict[int : (int, int)]
+        self.difficulty = difficulty
+
+        # retrieves the user saved difficulties for each pomodoro split
+        # converts the minutes for the focus and rest duration into seconds (*60)
+        for pomo_difficulty in data.retrieve_pomo_difficulties():
+            diff = int(pomo_difficulty["difficulty"])
+            focus_dur = int(pomo_difficulty["focusduration"]) * 60
+            rest_dur = int(pomo_difficulty["restduration"]) * 60
+            self.difficulties[diff] = (focus_dur, rest_dur)
+
+        # defines the current timers for based on the difficulty
+
+        self.focus_timer = None
+        self.focus_timer : BaseTimer
+        self.rest_timer = None
+        self.rest_timer : BaseTimer
+        self.timers = {}
+        self.timers : dict[bool : BaseTimer]
+
+        self.set_difficulty(difficulty)
+
+        # defines the current pomodoro mode and the number of rounds
+        self.focus_mode = True
+        self.rounds = 0
+
+        # defines the bin used to save updates to difficulty presets
+        self.modify_bin = []
+
+        # registers callback to timer completion
+        events.pomo_channel.get_event("TIMER_COMPLETED").register(lambda timer : self.switch_focus())
+
+
+    # on a timer completion event, the focus mode of the pomodoro timer is switched and the current timer changes
+    # number of rounds incremented if the previous timer was a rest
+    def switch_focus(self):
+        if self.focus_mode == False:
+            self.rounds += 1
+            # triggers ROUND_COMPLETED event after every round
+            events.pomo_channel.get_event("ROUND_COMPLETED").trigger()
+        self.focus_mode = not self.focus_mode
+
+    # changes pomodoro difficulty + defines the focus and rest timers based on pomodoro split derived from difficulty
+    def set_difficulty(self, difficulty : int):
+
+        self.validate_difficulty(difficulty)
+
+        self.difficulty = difficulty
+
+        focus_duration, rest_duration = self.get_split(self.difficulty)
+
         self.focus_timer = BaseTimer(duration=focus_duration)
         self.rest_timer = BaseTimer(duration=rest_duration)
         self.timers = {True : self.focus_timer, False : self.rest_timer}
         self.focus_mode = True
 
-        # registers callback to timer completion
-        events.pomo_channel.get_event("TIMER_COMPLETED").register(lambda timer : self.switch_focus())
+    # changes durations for this difficulty -- if no difficulty provided, uses current difficulty
+    # durations stored in seconds
+    def edit_split(self, focus_duration : int, rest_duration : int, difficulty : int = None):
 
-    def current_timer(self):
+        if not difficulty:
+            difficulty = self.difficulty
+
+        self.validate_difficulty(difficulty)
+
+        focus_duration_secs = focus_duration * 60
+        rest_duration_secs = rest_duration * 60
+
+        self.difficulties[difficulty] = (focus_duration_secs, rest_duration_secs)
+        self.focus_timer.duration, self.rest_timer.duration = focus_duration_secs, rest_duration_secs
+
+        self.bin_modified(difficulty=difficulty)
+
+    # validates difficulties passed into PomodoroTimer methods based on whether they actually exist in self.difficulties or not
+    def validate_difficulty(self, difficulty : int):
+
+        if type(difficulty) != int:
+            raise TypeError(f"Invalid type for difficulty value: {type(difficulty)}")
+
+        if difficulty not in self.difficulties:
+            raise ValueError(f"Invalid difficulty value: {difficulty} as argument for PomodoroTimer")
+
+    # bins a difficulty preset for it to be modified in the DB later
+    # saved in DB in minutes
+    def bin_modified(self, difficulty : int):
+
+        self.validate_difficulty(difficulty)
+        modified_pomo_difficulty = {}
+        modified_pomo_difficulty["difficulty"] = difficulty
+        focus_duration_mins, rest_duration_mins = self.get_split(difficulty)
+        focus_duration_mins /= 60
+        rest_duration_mins /= 60
+        modified_pomo_difficulty["focusduration"], modified_pomo_difficulty["restduration"] = focus_duration_mins, rest_duration_mins
+        self.modify_bin.append(modified_pomo_difficulty)
+
+    def empty_modified_bin(self):
+
+        if self.modify_bin:
+            data.modify_pomo_difficulties(*[pomo_difficulty for pomo_difficulty in self.modify_bin])
+
+    def get_split(self, difficulty : int):
+
+        self.validate_difficulty(difficulty)
+        return self.difficulties[difficulty]
+
+    def current_timer(self) -> BaseTimer:
         return self.timers[self.focus_mode]
 
     def get_both_timers(self) -> list[BaseTimer, BaseTimer]:
@@ -101,31 +206,17 @@ class _PomodoroTimer():
     def reset_timer(self):
         self.current_timer().reset_timer()
 
-    # on a timer completion event, the focus mode of the pomodoro timer is switched and the current timer changes
-    def switch_focus(self):
-        self.focus_mode = not self.focus_mode
-        # here is where we want to switch the previous timer from finished to not finished
-
-    # as it is a singleton object the durations may need to be changed
-    def set_durations(self, focus_duration : int, rest_duration : int):
-        self.focus_timer.duration = focus_duration
-        self.rest_timer.duration = rest_duration
-
 # the unique singleton object
 _pomodoro_timer_singleton = None
 
-# higher-level PomodoroTimer class used to return singleton
-def PomodoroTimer(focus_duration : int = None, rest_duration : int = None) -> _PomodoroTimer:
+# higher-level PomodoroTimer class used to define singleton if it doesnt exist and return singleton
+def PomodoroTimer(difficulty : int = 1) -> _PomodoroTimer:
 
     global _pomodoro_timer_singleton
 
-    # if the singleton hasn't been created yet and the incorrect number of arguments haven't been passed in, raise an exception
-    # otherwise, just create the object
-    # if it has been created already just return the singleton
     if not _pomodoro_timer_singleton:
-        if not focus_duration or not rest_duration:
-            raise ValueError("Singleton object for PomodoroTimer yet to be defined. Not enough arguments passed into PomodoroTimer to define.")
-        _pomodoro_timer_singleton = _PomodoroTimer(focus_duration=focus_duration, rest_duration=rest_duration)
+        _pomodoro_timer_singleton = _PomodoroTimer(difficulty=difficulty)
+
     return _pomodoro_timer_singleton
 
 
@@ -135,7 +226,8 @@ if __name__ == "__main__":
 
     import os
     import sys
-    from threading import enumerate
+    import datetime
+    # from threading import enumerate
 
     def clear_terminal():
         # For Windows
@@ -146,66 +238,101 @@ if __name__ == "__main__":
             _ = os.system('clear')
 
 
-    focus_duration = int(input("Enter focus duration (in seconds): "))
-    rest_duration = int(input("Enter rest duration (in seconds): "))
+    # focus_duration = int(input("Enter focus duration (in seconds): "))
+    # rest_duration = int(input("Enter rest duration (in seconds): "))
 
-    user_pomodoro = PomodoroTimer(focus_duration=focus_duration, rest_duration=rest_duration)
+    user_pomodoro = PomodoroTimer()
 
-    # called on every iteration of the timer -- displays the current elapsed time and commands without worrying about inputs
-    def display_timer():
+    difficulty_strings = ["Trivial", "Easy", "Normal", "Hard"]
 
-        # this is normally really bad practice -- callback function should not be coupled to global object
-        global user_pomodoro
+    while True:
+
+        running = False
+
         clear_terminal()
-
-        # displays relevant info about timer, supplying interface for inputs without handling inputs
-
-        # print(f"Ongoing threads: {enumerate()} ")
-
-        timer = user_pomodoro.current_timer()
-        print(f"{"FOCUS!" if user_pomodoro.focus_mode else "REST."}")
-        print(f"{timer.duration - timer.elapsed}s")
-
-        # print(f"Timer alive: {timer.iterating_timer.is_alive()}")
-        # print(f"Timer labelled as finished: {timer.finished}")
-        # print(f"Timer labelled as paused: {timer.paused}")
-        # print(f"Timer labelled as running: {timer.is_running()}")
-
-        if user_pomodoro.current_timer().is_running():
-            print("Stop [S]")
-        else:
-            print("Start [S]  [R] Reset  [E] Exit")
-
-    # each time the timer is iterated the elapsed is displayed to user
-    events.pomo_channel.get_event("TIMER_ITERATED").register(lambda timer : display_timer())
-    # if the timer is completed, it will update display one more time in order to switch modes
-    events.pomo_channel.get_event("TIMER_COMPLETED").register(lambda timer : display_timer())
-
-    running = True
-
-    while running == True:
-
-        display_timer()
-
-        user_input = input("").lower()
-
-        # handles user input depending on current state of pomodoro timer -- this is handled on the main thread
-
-        # commands for while timer is running (stop timer)
-        if user_pomodoro.current_timer().is_running():
-            if user_input == "s":
-                user_pomodoro.pause_timer()
-
-        # commands for while timer is idle (start timer, reset timer, exit)
-        else:
-            if user_input == "s":
-                user_pomodoro.start_timer()
-            elif user_input == "r":
-                user_pomodoro.reset_timer()
-            elif user_input == "e":
-                user_pomodoro.current_timer().finish_timer()
-                clear_terminal()
-                running = False
+        print("Difficulty:  Focus/Rest:")
+        for difficulty in user_pomodoro.difficulties:
+            difficulty_string = difficulty_strings[difficulty-1]
+            padding = " " * (10 - len(difficulty_string))
+            focus_duration, rest_duration = user_pomodoro.get_split(difficulty)
+            print(f"[{difficulty}] {difficulty_string}{padding}    {int(focus_duration / 60)}/{int(rest_duration / 60)}")
 
 
+        user_input = input("\n[1-4] Select  [X] Exit:\n").lower()
+
+        # validating inputs before progressing
+        if not user_input or (user_input.isdecimal() and int(user_input) not in user_pomodoro.difficulties) or (not user_input.isdecimal() and user_input != "x"):
+            while not user_input or (user_input.isdecimal() and int(user_input) not in user_pomodoro.difficulties) or (not user_input.isdecimal() and user_input != "x"):
+                user_input = input("[1-4] Select  [X] Exit:\n").lower()
+        if user_input.isdecimal():
+            choice = input("[E] Edit  [ENTER] Start:\n").lower()
+            if len(choice) == 0:
+                difficulty = int(user_input)
+                user_pomodoro.set_difficulty(difficulty)
+                running = True
+            elif choice == "e":
+                focus_dur = int(input("Focus duration (mins): "))
+                rest_dur = int(input("Rest duration (mins): "))
+                user_pomodoro.edit_split(focus_duration=focus_dur, rest_duration=rest_dur, difficulty=int(user_input))
+        elif user_input == "x":
+            break
+
+        # called on every iteration of the timer -- displays the current elapsed time and commands without worrying about inputs
+        def display_timer():
+
+            # this is normally really bad practice -- callback function should not be coupled to global object
+            global user_pomodoro
+            clear_terminal()
+
+            # displays relevant info about timer, supplying interface for inputs without handling inputs
+
+            # print(f"Ongoing threads: {enumerate()} ")
+
+            timer = user_pomodoro.current_timer()
+            rounds = user_pomodoro.rounds
+            mins_secs = datetime.timedelta(seconds=(timer.duration - timer.elapsed))
+
+            print(f"{"FOCUS!" if user_pomodoro.focus_mode else "REST."} { ( "{" + str(rounds) + "}" ) if rounds > 0 else "" }")
+            print(f"{mins_secs}")
+
+            # print(f"Timer alive: {timer.iterating_timer.is_alive()}")
+            # print(f"Timer labelled as finished: {timer.finished}")
+            # print(f"Timer labelled as paused: {timer.paused}")
+            # print(f"Timer labelled as running: {timer.is_running()}")
+
+            if user_pomodoro.current_timer().is_running():
+                print("\nStop [S]")
+            else:
+                print("\nStart [S]  [R] Reset  [E] Exit")
+
+        # each time the timer is iterated the elapsed is displayed to user
+        events.pomo_channel.get_event("TIMER_ITERATED").register(lambda timer : display_timer())
+        # if the timer is completed, it will update display one more time in order to switch modes
+        events.pomo_channel.get_event("TIMER_COMPLETED").register(lambda timer : display_timer())
+
+        while running == True:
+
+            display_timer()
+
+            user_input = input("").lower()
+
+            # handles user input depending on current state of pomodoro timer -- this is handled on the main thread
+
+            # commands for while timer is running (stop timer)
+            if user_pomodoro.current_timer().is_running():
+                if user_input == "s":
+                    user_pomodoro.pause_timer()
+
+            # commands for while timer is idle (start timer, reset timer, exit)
+            else:
+                if user_input == "s":
+                    user_pomodoro.start_timer()
+                elif user_input == "r":
+                    user_pomodoro.reset_timer()
+                elif user_input == "e":
+                    user_pomodoro.current_timer().reset_timer()
+                    clear_terminal()
+                    running = False
+
+    user_pomodoro.empty_modified_bin()
     sys.exit()
