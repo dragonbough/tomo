@@ -32,7 +32,7 @@ class BaseTimer():
     def iterate_timer(self):
         self.elapsed += 1
         # triggers timer iteration event, passing in the timer as argument
-        events.pomo_channel.get_event("TIMER_ITERATED").trigger(self)
+        events.pomo_topic.get_event("TIMER_ITERATED").trigger(self)
 
         # if the elapsed time is more than duration, carry out completion stuff
         if self.elapsed >= self.duration:
@@ -45,7 +45,7 @@ class BaseTimer():
         # AS IT IS QUICKLY TURNED BACK TO UNFINISHED IN THE RESET_TIMER METHOD
         self.iterating_timer.finished.set()
         self.finished = True
-        events.pomo_channel.get_event("TIMER_COMPLETED").trigger(self)
+        events.pomo_topic.get_event("TIMER_COMPLETED").trigger(self)
         self.reset_timer()
 
     def start_timer(self):
@@ -116,7 +116,7 @@ class _PomodoroTimer():
         self.modify_bin = []
 
         # registers callback to timer completion
-        events.pomo_channel.get_event("TIMER_COMPLETED").register(lambda timer : self.switch_focus())
+        events.pomo_topic.get_event("TIMER_COMPLETED").register(lambda timer : self.switch_focus())
 
 
     # on a timer completion event, the focus mode of the pomodoro timer is switched and the current timer changes
@@ -125,7 +125,7 @@ class _PomodoroTimer():
         if self.focus_mode == False:
             self.rounds += 1
             # triggers ROUND_COMPLETED event after every round
-            events.pomo_channel.get_event("ROUND_COMPLETED").trigger()
+            events.pomo_topic.get_event("ROUND_COMPLETED").trigger()
         self.focus_mode = not self.focus_mode
 
     # changes pomodoro difficulty + defines the focus and rest timers based on pomodoro split derived from difficulty
@@ -306,9 +306,9 @@ if __name__ == "__main__":
                 print("\nStart [S]  [R] Reset  [E] Exit")
 
         # each time the timer is iterated the elapsed is displayed to user
-        events.pomo_channel.get_event("TIMER_ITERATED").register(lambda timer : display_timer())
+        events.pomo_topic.get_event("TIMER_ITERATED").register(lambda timer : display_timer())
         # if the timer is completed, it will update display one more time in order to switch modes
-        events.pomo_channel.get_event("TIMER_COMPLETED").register(lambda timer : display_timer())
+        events.pomo_topic.get_event("TIMER_COMPLETED").register(lambda timer : display_timer())
 
         while running == True:
 
