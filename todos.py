@@ -182,7 +182,7 @@ class TodoList():
 
         # triggers event declaring that a todo was completed, passing in the todo as argument
         if todo.completed == True:
-            events.todo_channel.get_event("TODO_COMPLETED").trigger(todo)
+            events.todo_topic.get_event("TODO_COMPLETED").trigger(todo)
 
         for child in todo.children:
             self.complete_todo(child, completion)
