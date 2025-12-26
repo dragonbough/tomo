@@ -9,20 +9,14 @@ cursor = connection.cursor()
 #if db doesn't exist here, constructs db using schema commands
 if not os.path.isfile("tomo_data.db"):
     cursor.executescript("""CREATE TABLE sqlite_sequence(name,seq);
-CREATE TABLE Todo (ID Integer PRIMARY KEY AUTOINCREMENT, Name VARCHAR NOT NULL,
-Difficulty INTEGER, Completed INTEGER CHECK (Completed == 1 OR Completed == 0),
-Points INTEGER, TimeCreated INTEGER NOT NULL, TimeCompleted INTEGER,
-ParentID INTEGER REFERENCES Todo (ID));
-CREATE TABLE TomoStats(ID INTEGER PRIMARY KEY, BaseName VARCHAR(45) NOT NULL);
-CREATE TABLE TomoLevelingStats(TomoID INTEGER NOT NULL, BondLevel INTEGER NOT NULL,
-RequiredXP INTEGER NOT NULL, Sprite BLOB, HP INTEGER NOT NULL, FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
-CREATE TABLE Item(ID INTEGER PRIMARY KEY, ItemName VARCHAR(45) NOT NULL, Sprite BLOB, Effect VARCHAR);
-CREATE TABLE UserTomo(TomoID INTEGER PRIMARY KEY, Name VARCHAR(45) NOT NULL,
-HP INTEGER NOT NULL, XP INTEGER NOT NULL, BondLevel INTEGER NOT NULL, FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
-CREATE TABLE UserTomoItem(TomoID INTEGER NOT NULL, ItemID INTEGER NOT NULL, FOREIGN KEY (TomoID) REFERENCES TomoStats(ID),
-FOREIGN KEY (ItemID) REFERENCES Item(ID));
-CREATE TABLE PomoDifficulties (Difficulty INTEGER PRIMARY KEY CHECK (Difficulty <= 4), FocusDuration INTEGER,
-RestDuration INTEGER);""")
+                         CREATE TABLE Todo (ID Integer PRIMARY KEY AUTOINCREMENT, Name VARCHAR NOT NULL, Difficulty INTEGER, Completed INTEGER CHECK (Completed == 1 OR Completed == 0),
+                         Points INTEGER, TimeCreated INTEGER NOT NULL, TimeCompleted INTEGER, ParentID INTEGER REFERENCES Todo (ID));
+                         CREATE TABLE TomoStats(ID INTEGER PRIMARY KEY, BaseName VARCHAR(45) NOT NULL);
+                         CREATE TABLE TomoLevelingStats(TomoID INTEGER NOT NULL, BondLevel INTEGER NOT NULL, RequiredXP INTEGER NOT NULL, Sprite BLOB, HP INTEGER NOT NULL,
+                         FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
+                         CREATE TABLE UserTomo(TomoID INTEGER PRIMARY KEY, Name VARCHAR(45) NOT NULL, HP INTEGER NOT NULL, XP INTEGER NOT NULL, BondLevel INTEGER NOT NULL,
+                         FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
+                         CREATE TABLE PomoDifficulties (Difficulty INTEGER PRIMARY KEY CHECK (Difficulty <= 4), FocusDuration INTEGER, RestDuration INTEGER)""")
     #write-ahead logging -- increased performance benefit but won't work on network filesystems or read only DBs
     cursor.execute("PRAGMA journal_mode=WAL;")
     connection.commit()
@@ -35,7 +29,7 @@ def generate_bindings(data):
         bindings = "?, " * (len(data) - 1) + "?"
     return bindings
 
-### TODO DATA ###
+### TO-DO DATA ###
 
 #retrieve todo data based on id, or if not given, retrieve all todos from DB
 def retrieve_todo_data(*todo_ids : int) -> list[dict]:
@@ -176,6 +170,10 @@ def retrieve_tomo_data(*tomo_ids : int) -> tuple[list[dict], dict]:
 
     return user_tomo_data, organised_base_tomo_data
 
+# modifies tomos with the provided base_ids
+def modify_tomo_data(*tomo_data : dict):
+    cursor.executemany("UPDATE UserTomo SET Name = (?), HP = (?), XP = (?), BondLevel = (?) WHERE TomoID = (?)", [(tomo_datum["name"], tomo_datum["hp"], tomo_datum["xp"], tomo_datum["bondlevel"], tomo_datum["id"]) for tomo_datum in tomo_data])
+    connection.commit()
 
 ## POMO DATA ##
 
