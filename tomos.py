@@ -1,5 +1,6 @@
 import data
 import events
+import math
 
 #class defining a state in a state machine
 class State():
@@ -92,6 +93,9 @@ class BaseTomo():
             if level["xp"] > xp:
                 return current_level
 
+    def get_level_stats(self, level : int) -> dict[str]:
+        return self.levels[level]
+
 #tomo is an agent that relies on a finite state machine for its behaviours
 class Tomo():
 
@@ -102,21 +106,53 @@ class Tomo():
         self.xp = xp
         self.bond_level = level
         self.fsm = StateMachine()
+        self.updated = False
 
-    def get_base_hp(self) -> int:
-        return self.base_tomo.levels[self.bond_level]["hp"]
-
+    # checks for a level up / level down -- if its possible then level up / down
+    # otherwise, returns False
     def check_for_level(self):
-        return self.base_tomo.check_for_level(self.xp)
-
-    def increase_xp(self, amount : int):
-        self.xp += amount
-        print(f"{self.name}'s XP increased by {amount}!")
-        new_level = self.check_for_level()
-        if new_level > self.bond_level:
+        new_level = self.base_tomo.check_for_level(self.xp)
+        if new_level != self.bond_level:
             self.bond_level = new_level
-            print(f"{self.name}'s BOND LVL increased to {self.bond_level}")
+            new_stats = self.get_base_stats()
+            self.set_stat(hp=new_stats["hp"])
 
+            # triggers level increased event
+            events.tomo_topic.get_event("LVL_INCREASED").trigger(self)
+
+            print(f"{self.name}'s BOND LVL changed to {self.bond_level}")
+        else:
+            return False
+
+    # returns the dict of base stats for the level passed in as argument
+    # if no level passed in, uses current tomo level
+    def get_base_stats(self, level : int = None):
+        return self.base_tomo.get_level_stats(self.level if not level else level)
+
+    # increases xp/hp by certain amount
+    def increase_stat(self, hp : int = None, xp : int = None):
+        if hp:
+            self.hp += hp
+        if xp:
+            self.xp += xp
+            self.check_for_level()
+        self.updated = True
+
+        print(f"{self.name}'s XP increased by {amount}!")
+
+    # sets xp/xp to a specific amount
+    def set_stat(self, hp: int = None, xp : int = None):
+        if hp:
+            self.hp = hp
+        if xp:
+            self.xp = xp
+        self.updated = True
+
+    # sets the tomo's name to a new name
+    def rename(self, name : str):
+        if name:
+            self.name = name
+        self.updated = True
 
 # collection of Tomos
 class UserTomos():
@@ -163,7 +199,9 @@ class UserTomos():
 
         return UserTomos(tomos=tomos)
 
-
+    # takes a list of tomos as argument and saves these in a dictionary
+    # in the dictionary the tomo_id is used as the key for the tomo object
+    # also stores a current_tomo to keep track of the tomo the user has equipped
     def __init__(self, tomos : list[Tomo]):
         self.tomos = {}
         for tomo in tomos:
@@ -172,14 +210,69 @@ class UserTomos():
 
         # registers xp increase of selected tomo to the todo completion event
         func = lambda todo : self.current_tomo.increase_xp(todo.difficulty) if self.current_tomo else print("No tomo selected")
-        events.todo_channel.get_event("TODO_COMPLETED").register(func)
+        events.todo_topic.get_event("TODO_COMPLETED").register(func)
 
-    def get_tomos(self):
+    # the events that occur when a todo is completed
+    # (xp increase, etc)
+    def todo_completion(self, todo):
+        if self.current_tomo:
+
+            # calculate number of rounds completed since start of timer, using event stream
+            completed_rounds = 0
+            event_stream = events.todo_topic.stream.get_stream()
+            for event_log in event_stream:
+                event_name = event_log[1]
+                if event_name == "ROUND_COMPLETED":
+                    completed_rounds += 1
+                elif event_name == "FOCUS_PERIOD_STARTED":
+                    break
+
+            # calculate the xp increase using exponential function made in desmos linking xp to difficulty of task and number of rounds:
+            # https://www.desmos.com/calculator/cs1y5k6hg3
+            if completed_rounds > 0:
+                # variable d represents todo difficulty
+                d = todo.difficulty
+                # variable x represenents number of completed rounds
+                x = completed_rounds
+
+                xp_increase = 10 + 10 * ( (d+1) ** (x * (d+1 / 12)) )
+                xp_increase = round(xp_increase)
+
+            else:
+                xp_increase = 5
+
+            self.current_tomo.increase_stat(xp=xp_increase)
+        else:
+            print("No tomo selected")
+
+    # takes the tomos marked as updated, unpacks them,
+    # and passes them into the data layer to save changes in DB
+    def update_tomos(self):
+        updated_tomos = [tomo for tomo in self.tomos if tomo.updated]
+        data.modify_tomo_data(*self.unpack_tomos(updated_tomos))
+
+    # turns tomo object data into a dictionary for each of the tomos that are passed in
+    def unpack_tomos(self, tomos : list[Tomo]):
+        unpacked_tomos = []
+        for tomo in tomos:
+            tomo_datum = {}
+            tomo_datum["name"] = tomo.name
+            tomo_datum["hp"] = tomo.hp
+            tomo_datum["xp"] = tomo.xp
+            tomo_datum["bondlevel"] = tomo.bond_level
+            tomo_datum["id"] = tomo.base_tomo.tomo_id
+            unpacked_tomos.append(tomo_datum)
+        return unpacked_tomos
+
+    # returns all of the user's tomos
+    def get_tomos(self) -> list[Tomo]:
         return self.tomos.values()
 
+    # returns a specific tomo based on its id
     def get_tomo(self, base_tomo_id : int):
         return self.tomos[base_tomo_id]
 
+    # selects a tomo in the users tomos as the "current"/"main" one
     def select_tomo(self, tomo : Tomo):
         if tomo in self.get_tomos():
             self.current_tomo = tomo
@@ -194,6 +287,7 @@ if __name__ == "__main__":
 
     def clear_terminal():
         # For Windows
+
         if os.name == 'nt':
             _ = os.system('cls')
         # For macOS and Linux
@@ -202,16 +296,16 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 1 and sys.argv[1] == "stats":
 
-        user_tomos = UserTomos.get_user_tomos()
-        # print("\nData retrieval successful! :D")
-
         # displays CLI tomo stats
         def display_tomo_stats(tomo : Tomo):
             print(f"{tomo.name}'s Stats:")
 
             print(f"BOND LVL: {tomo.bond_level} ({tomo.xp} XP)")
 
-            base_hp = tomo.get_base_hp()
+            base_stats = tomo.get_base_stats()
+
+            base_hp = base_stats["hp"]
+
             max_bar_length = 10
             bar_length = int(tomo.hp / base_hp * max_bar_length)
             empty_bar_length = max_bar_length - bar_length
@@ -219,14 +313,16 @@ if __name__ == "__main__":
 
         running = True
 
+        user_tomos = UserTomos.get_user_tomos()
+        # print("\nData retrieval successful! :D")
         while running:
 
+            user_tomos.current_tomo = None
             tomo_id = ""
             valid = False
             while not valid:
                 clear_terminal()
                 for tomo in user_tomos.get_tomos():
-                    tomo : Tomo
                     print(f"[{tomo.base_tomo.tomo_id}] {tomo.name}")
                 tomo_id = input("Select Tomo ([E] to exit): ")
                 if tomo_id.isdecimal() and int(tomo_id) in user_tomos.tomos:
@@ -239,7 +335,8 @@ if __name__ == "__main__":
             else:
                 clear_terminal()
                 tomo = user_tomos.get_tomo(int(tomo_id))
-                display_tomo_stats(tomo=tomo)
+                user_tomos.select_tomo(tomo)
+                display_tomo_stats(tomo=user_tomos.current_tomo)
                 input("")
 
 
