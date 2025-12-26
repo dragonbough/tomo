@@ -83,16 +83,21 @@ class BaseTomo():
     def __init__(self, tomo_id : int, base_name : str, levels : dict[int : dict[str : int]]):
         self.tomo_id = tomo_id
         self.base_name = base_name
-        # {level : {"hp" : 1, "xp" : 1, "sprite" : File}}
+        # {level : {"hp" : 1, "required_xp" : 1, "sprite" : File}}
         self.levels = levels
 
+    # returns the highest level for the given xp
     def check_for_level(self, xp : int):
-        for level in self.levels:
-            level : int
+        # must be done in order to work -- sorting self.levels by key (level)
+        tomo_levels = dict(sorted(self.levels.items(), key=lambda item: item[0]))
+        for level in tomo_levels:
             current_level = level
-            if level["xp"] > xp:
+            print(self.levels)
+            if self.get_level_stats(level)["required_xp"] > xp:
                 return current_level
+        return current_level
 
+    # returns dictionary of stats for given level
     def get_level_stats(self, level : int) -> dict[str]:
         return self.levels[level]
 
@@ -127,18 +132,23 @@ class Tomo():
     # returns the dict of base stats for the level passed in as argument
     # if no level passed in, uses current tomo level
     def get_base_stats(self, level : int = None):
-        return self.base_tomo.get_level_stats(self.level if not level else level)
+        return self.base_tomo.get_level_stats(self.bond_level if not level else level)
 
     # increases xp/hp by certain amount
     def increase_stat(self, hp : int = None, xp : int = None):
         if hp:
+            if type(hp) != int:
+                raise TypeError("Invalid HP increase value")
             self.hp += hp
+            print(f"{self.name}'s HP increased by {hp}!")
         if xp:
+            if type(xp) != int:
+                raise TypeError("Invalid XP increase value")
             self.xp += xp
+            print(f"{self.name}'s XP increased by {xp}!")
             self.check_for_level()
         self.updated = True
 
-        print(f"{self.name}'s XP increased by {amount}!")
 
     # sets xp/xp to a specific amount
     def set_stat(self, hp: int = None, xp : int = None):
@@ -248,7 +258,7 @@ class UserTomos():
     # takes the tomos marked as updated, unpacks them,
     # and passes them into the data layer to save changes in DB
     def update_tomos(self):
-        updated_tomos = [tomo for tomo in self.tomos if tomo.updated]
+        updated_tomos = [tomo for tomo in self.get_tomos() if tomo.updated]
         data.modify_tomo_data(*self.unpack_tomos(updated_tomos))
 
     # turns tomo object data into a dictionary for each of the tomos that are passed in
@@ -279,6 +289,10 @@ class UserTomos():
         else:
             raise KeyError(f"Tomo {tomo.name} not in UserTomos")
 
+    # deselects tomo
+    def deselect_tomo(self):
+        self.current_tomo = None
+
 
 if __name__ == "__main__":
 
@@ -294,6 +308,7 @@ if __name__ == "__main__":
         else:
             _ = os.system('clear')
 
+    ### TOMO STATS TESTING ###
     if len(sys.argv) > 1 and sys.argv[1] == "stats":
 
         # displays CLI tomo stats
@@ -314,32 +329,50 @@ if __name__ == "__main__":
         running = True
 
         user_tomos = UserTomos.get_user_tomos()
+        user_tomos.current_tomo = None
+
         # print("\nData retrieval successful! :D")
         while running:
 
-            user_tomos.current_tomo = None
             tomo_id = ""
-            valid = False
-            while not valid:
-                clear_terminal()
-                for tomo in user_tomos.get_tomos():
-                    print(f"[{tomo.base_tomo.tomo_id}] {tomo.name}")
-                tomo_id = input("Select Tomo ([E] to exit): ")
-                if tomo_id.isdecimal() and int(tomo_id) in user_tomos.tomos:
-                    valid = True
-                elif tomo_id.lower() == "e":
-                    break
 
-            if not valid:
-                running = False
-            else:
+            clear_terminal()
+
+            for tomo in user_tomos.get_tomos():
+                print(f"[{tomo.base_tomo.tomo_id}] {tomo.name}")
+
+            tomo_id = input("Select Tomo ([E] to exit): ")
+
+            if tomo_id.isdecimal() and int(tomo_id) in user_tomos.tomos:
+
                 clear_terminal()
                 tomo = user_tomos.get_tomo(int(tomo_id))
                 user_tomos.select_tomo(tomo)
-                display_tomo_stats(tomo=user_tomos.current_tomo)
-                input("")
+
+            elif tomo_id.lower() == "e":
+                break
+
+            while user_tomos.current_tomo:
+
+                current_tomo = user_tomos.current_tomo
+                current_tomo : Tomo
+
+                clear_terminal()
+                display_tomo_stats(tomo=current_tomo)
+
+                choice = int(input("[1] Rename  [2] Increase XP  [3] Exit\n"))
+
+                if choice == 1:
+                    current_tomo.rename(input("Enter name: "))
+                elif choice == 2:
+                    current_tomo.increase_stat(xp=int(input("How much XP?")))
+                elif choice == 3:
+                    user_tomos.deselect_tomo()
+
+        user_tomos.update_tomos()
 
 
+    ### TOMO FSM TESTING ###
     elif len(sys.argv) > 1 and sys.argv[1] == "fsm":
 
         import networkx as nx
