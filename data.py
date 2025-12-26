@@ -160,13 +160,15 @@ def retrieve_tomo_data(*tomo_ids : int) -> tuple[list[dict], dict]:
         required_xp = int(base_tomo_datum["requiredxp"])
         hp = int(base_tomo_datum["hp"])
 
-        levels = {level : {"required_xp" : required_xp, "hp" : hp}}
+        level_data = {level : {"required_xp" : required_xp, "hp" : hp}}
+
         if base_id not in organised_base_tomo_data:
-            organised_base_tomo_data[base_id] = {"basename" : base_name, "levels" : levels}
+            organised_base_tomo_data[base_id] = {"basename" : base_name, "levels" : level_data}
         else:
-            organised_base_tomo_data[base_id]["levels"] = levels
+            organised_base_tomo_data[base_id]["levels"].update(level_data)
 
     # print(organised_base_tomo_data)
+    # input("")
 
     return user_tomo_data, organised_base_tomo_data
 
