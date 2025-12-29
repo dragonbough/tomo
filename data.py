@@ -2,23 +2,50 @@ import os
 import sqlite3
 
 connection = sqlite3.connect("tomo_data.db")
+
 #rows are returned as indexed dictionary instead of tuples
 connection.row_factory = sqlite3.Row
+
 cursor = connection.cursor()
 
-#if db doesn't exist here, constructs db using schema commands
+#if db doesn't exist in directory already, constructs db using schema commands
 if not os.path.isfile("tomo_data.db"):
-    cursor.executescript("""CREATE TABLE sqlite_sequence(name,seq);
-                         CREATE TABLE Todo (ID Integer PRIMARY KEY AUTOINCREMENT, Name VARCHAR NOT NULL, Difficulty INTEGER, Completed INTEGER CHECK (Completed == 1 OR Completed == 0),
-                         Points INTEGER, TimeCreated INTEGER NOT NULL, TimeCompleted INTEGER, ParentID INTEGER REFERENCES Todo (ID));
-                         CREATE TABLE TomoStats(ID INTEGER PRIMARY KEY, BaseName VARCHAR(45) NOT NULL);
-                         CREATE TABLE TomoLevelingStats(TomoID INTEGER NOT NULL, BondLevel INTEGER NOT NULL, RequiredXP INTEGER NOT NULL, Sprite BLOB, HP INTEGER NOT NULL,
-                         FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
-                         CREATE TABLE UserTomo(TomoID INTEGER PRIMARY KEY, Name VARCHAR(45) NOT NULL, HP INTEGER NOT NULL, XP INTEGER NOT NULL, BondLevel INTEGER NOT NULL,
-                         FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
-                         CREATE TABLE PomoDifficulties (Difficulty INTEGER PRIMARY KEY CHECK (Difficulty <= 4), FocusDuration INTEGER, RestDuration INTEGER)""")
+
     #write-ahead logging -- increased performance benefit but won't work on network filesystems or read only DBs
     cursor.execute("PRAGMA journal_mode=WAL;")
+
+    #creates the sequence table so that auto increment works
+    cursor.execute("CREATE TABLE sqlite_sequence(name,seq);")
+
+    # creates and populates the PomoDifficulties table (with default splits)
+    cursor.executescript("""CREATE TABLE PomoDifficulties (Difficulty INTEGER PRIMARY KEY CHECK (Difficulty <= 4), FocusDuration INTEGER, RestDuration INTEGER);
+                         INSERT INTO PomoDifficulties VALUES(1,75,30);
+                         INSERT INTO PomoDifficulties VALUES(2,50,10);
+                         INSERT INTO PomoDifficulties VALUES(3,25,5);
+                         INSERT INTO PomoDifficulties VALUES(4,15,5);""")
+
+    # creates the Todo table
+    cursor.execute("""CREATE TABLE Todo (ID Integer PRIMARY KEY AUTOINCREMENT, Name VARCHAR NOT NULL, Difficulty INTEGER, Completed INTEGER CHECK (Completed == 1 OR Completed == 0),
+                   Points INTEGER, TimeCreated INTEGER NOT NULL, TimeCompleted INTEGER, ParentID INTEGER REFERENCES Todo (ID));""")
+
+    ## FOR BASE TOMOS ##
+
+    # creates the TomoStats table and populates with data
+    cursor.executescript("""CREATE TABLE TomoStats(ID INTEGER PRIMARY KEY, BaseName VARCHAR(45) NOT NULL);
+                         INSERT INTO TomoStats VALUES(1,'Pebble');""")
+
+    # creates the TomoLevelingStats table and populates with data
+    cursor.executescript("""CREATE TABLE TomoLevelingStats(TomoID INTEGER NOT NULL, BondLevel INTEGER NOT NULL, RequiredXP INTEGER NOT NULL, Sprite BLOB, HP INTEGER NOT NULL, FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
+                         INSERT INTO TomoLevelingStats VALUES(1,2,300,NULL,150);
+                         INSERT INTO TomoLevelingStats VALUES(1,1,100,NULL,100);""")
+
+    ## FOR BASE TOMOS ##
+
+    # creates UserTomo table
+    cursor.execute("""CREATE TABLE UserTomo(TomoID INTEGER PRIMARY KEY, Name VARCHAR(45) NOT NULL, HP INTEGER NOT NULL, XP INTEGER NOT NULL, BondLevel INTEGER NOT NULL,
+                   FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));""")
+
+
     connection.commit()
 
 # generates the SQL bindings for variably sized data
