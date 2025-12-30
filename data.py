@@ -1,15 +1,11 @@
 import os
 import sqlite3
 
-connection = sqlite3.connect("tomo_data.db")
-
-#rows are returned as indexed dictionary instead of tuples
-connection.row_factory = sqlite3.Row
-
-cursor = connection.cursor()
-
 #if db doesn't exist in directory already, constructs db using schema commands
 if not os.path.isfile("tomo_data.db"):
+
+    connection = sqlite3.connect("tomo_data.db")
+    cursor = connection.cursor()
 
     #write-ahead logging -- increased performance benefit but won't work on network filesystems or read only DBs
     cursor.execute("PRAGMA journal_mode=WAL;")
@@ -47,6 +43,15 @@ if not os.path.isfile("tomo_data.db"):
 
 
     connection.commit()
+
+else:
+
+    connection = sqlite3.connect("tomo_data.db")
+
+    #rows are returned as indexed dictionary instead of tuples
+    connection.row_factory = sqlite3.Row
+
+    cursor = connection.cursor()
 
 # generates the SQL bindings for variably sized data
 def generate_bindings(data):
