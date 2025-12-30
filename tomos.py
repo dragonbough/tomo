@@ -1,6 +1,6 @@
 import data
 import events
-import math
+# import math
 
 #class defining a state in a state machine
 class State():
