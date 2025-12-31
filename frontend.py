@@ -1,11 +1,15 @@
 import sys
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QHeaderView, QHBoxLayout, QCheckBox, QTextEdit, QLineEdit, QLabel, QSizePolicy)
+from PyQt6.QtCore import Qt, QThread
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QHeaderView, QHBoxLayout, QCheckBox, QLineEdit, QLabel)
 
 import todos
 import tomos
 import pomos
+
+# allows closing the application using CTRL + C
+import signal
+signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 
 class Window(QMainWindow):
@@ -21,18 +25,65 @@ class TodoViewItem(QTreeWidgetItem):
 
         self.item_id = todo_id
 
-        # references self in the todo_view for easy access
+        # references self in the todo_view + references todo_view in self for easy access
         todo_view.items.append(self)
+        self.todo_view = todo_view
 
         # gets its todo and extracts any important info -- does not save in the view item for decoupling purposes
-        my_todo = todo_view.todo_list.get_todo(todo_id)
+        my_todo = self.todo_view.todo_list.get_todo(todo_id)
+
+        # creating text and checkbox widgets
+        self.item_label = QLabel(my_todo.name)
+        self.item_checkbox = QCheckBox()
+        self.item_checkbox.setChecked(my_todo.completed)
+        # checkbox can only focus with clicks instead of tab/space
+        self.item_checkbox.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+
+        # creating layout to store text and checkbox and adding to item_widget
+        self.item_widget = QWidget()
+        self.item_layout = QHBoxLayout()
+        self.item_layout.addWidget(self.item_checkbox)
+        self.item_layout.addWidget(self.item_label)
+        self.item_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.item_widget.setLayout(self.item_layout)
+
+        # creating line_edit for editing labels
+        self.line_edit = QLineEdit()
 
         # creates difficulty column based on the todo's difficulty
         difficulties =  {1: "Trivial",  2: "Easy",  3: "Normal",  4: "Hard"}
         self.setText(1, difficulties[my_todo.difficulty])
 
         # creates children todoview items for each child in my_todo
-        self.addChildren([TodoViewItem(child.todo_id, todo_view) for child in my_todo.children])
+        self.addChildren([TodoViewItem(child.todo_id, self.todo_view) for child in my_todo.children])
+
+
+    # turns the QLabel into QLineEdit, allowing user to change what was there
+    def enable_edit(self):
+
+        item_text = self.item_label.text()
+        self.item_layout.removeWidget(self.item_label)
+        self.item_label.setVisible(False)
+
+        self.line_edit.setText(item_text)
+        self.item_layout.addWidget(self.line_edit)
+        self.line_edit.setVisible(True)
+
+        self.line_edit.setFocus()
+
+    # completes the edit in the qlineedit, renaming the todos and replacing it with a qlabel again
+    def complete_edit(self):
+
+        new_text = self.line_edit.text()
+        self.item_layout.removeWidget(self.line_edit)
+        self.line_edit.setVisible(False)
+
+        self.item_label.setText(new_text)
+        self.item_layout.addWidget(self.item_label)
+        self.item_label.setVisible(True)
+
+        my_todo = self.todo_view.todo_list.get_todo(self.item_id)
+        my_todo.name = new_text
 
 # collection of TodoViewItems that is viewed in window
 class TodoView(QTreeWidget):
@@ -44,38 +95,41 @@ class TodoView(QTreeWidget):
         self.items = []
 
         # sets up each column of the todo view, ensuring they resize to contents and the last column isnt stretched
-        # self.setHeaderLabels(["Completed", "Name", "Difficulty"])
-        self.setHeaderLabels(["Stuff", "Difficulty"])
+        self.setHeaderLabels(["To-dos", "Difficulty"])
         self.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.header().setStretchLastSection(False)
+
 
         # adds top level items for the root nodes in the todo list
         todo_view_roots = [TodoViewItem(root_todo.todo_id, self) for root_todo in todo_list.get_roots()]
         self.addTopLevelItems(todo_view_roots)
 
-        # format a widget holding a checkbox and text for each todoviewitem in view
+
+        # for each todoviewitem in todoview, set its content to its item_widget (checkbox and label)
         for item in self.items:
 
             item : TodoViewItem
 
-            # creating text and checkbox widgets
-            item_todo = self.todo_list.get_todo(item.item_id)
-            item_text = QLabel(item_todo.name)
-            item_checkbox = QCheckBox()
-            item_checkbox.setChecked(item_todo.completed)
+            self.setItemWidget(item, 0, item.item_widget)
+            item.item_widget.adjustSize()
+            item.setSizeHint(0, item.item_widget.sizeHint())
+            item.item_widget.show()
 
-            # creating layout to store text and checkbox and adding to item_widget
-            item_widget = QWidget()
-            item_layout = QHBoxLayout()
-            item_layout.addWidget(item_checkbox)
-            item_layout.addWidget(item_text)
-            item_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
-            item_widget.setLayout(item_layout)
+        # if an item is being edited or not
+        self.editing_item = None
 
-            # the widget is assigned to the todoviewitem + the todoviewitem adopts the widgets size hint
-            self.setItemWidget(item, 0, item_widget)
-            item_widget.adjustSize()
-            item.setSizeHint(0, item_widget.sizeHint())
+
+    # detects if ENTER/Return key is released while over a todoviewitem to enable/complete edit
+    def keyReleaseEvent(self, a0):
+        if a0.key() == Qt.Key.Key_Return:
+            if not self.editing_item:
+                self.currentItem().enable_edit()
+                self.editing_item = self.currentItem()
+            elif self.editing_item == self.currentItem():
+                self.currentItem().complete_edit()
+                self.editing_item = None
+
+        return super().keyReleaseEvent(a0)
 
 
 # sys.argv allows arguments to be passed into the QApplication from the command line
