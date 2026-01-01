@@ -1,6 +1,6 @@
 import sys
 
-from PyQt6.QtCore import Qt, QThread
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QHeaderView, QHBoxLayout, QCheckBox, QLineEdit, QLabel)
 
 import todos
@@ -30,7 +30,7 @@ class TodoViewItem(QTreeWidgetItem):
         self.todo_view = todo_view
 
         # gets its todo and extracts any important info -- does not save in the view item for decoupling purposes
-        my_todo = self.todo_view.todo_list.get_todo(todo_id)
+        my_todo = self.todo_view.get_item_todo(self)
 
         # creating text and checkbox widgets
         self.item_label = QLabel(my_todo.name)
@@ -38,6 +38,9 @@ class TodoViewItem(QTreeWidgetItem):
         self.item_checkbox.setChecked(my_todo.completed)
         # checkbox can only focus with clicks instead of tab/space
         self.item_checkbox.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        # checkbox triggers the todo completion by todoview
+        # ensure it is the "clicked" signal as otherwise setCheckState calls will trigger this too
+        self.item_checkbox.clicked.connect(lambda checked : self.todo_view.item_checked(checked, self))
 
         # creating layout to store text and checkbox and adding to item_widget
         self.item_widget = QWidget()
@@ -57,6 +60,10 @@ class TodoViewItem(QTreeWidgetItem):
         # creates children todoview items for each child in my_todo
         self.addChildren([TodoViewItem(child.todo_id, self.todo_view) for child in my_todo.children])
 
+    # refreshes the attributes -- use when a change is made that isnt immediately reflected the todoviewitem object
+    def refresh_attributes(self):
+        my_todo = self.todo_view.get_item_todo(self)
+        self.item_checkbox.setChecked(my_todo.completed)
 
     # turns the QLabel into QLineEdit, allowing user to change what was there
     def enable_edit(self):
@@ -93,6 +100,7 @@ class TodoView(QTreeWidget):
 
         self.todo_list = todo_list
         self.items = []
+        self.items : list[TodoViewItem]
 
         # sets up each column of the todo view, ensuring they resize to contents and the last column isnt stretched
         self.setHeaderLabels(["To-dos", "Difficulty"])
@@ -118,6 +126,25 @@ class TodoView(QTreeWidget):
         # if an item is being edited or not
         self.editing_item = None
 
+        self.setSizeAdjustPolicy(self.SizeAdjustPolicy.AdjustToContents)
+        self.itemExpanded.connect(self.adjustSize)
+        self.itemCollapsed.connect(self.adjustSize)
+
+    # changes todo completion when an items checkbox is checked
+    def item_checked(self, checked : bool, todo_view_item : TodoViewItem):
+
+        todo = self.todo_list.get_todo(todo_view_item.item_id)
+        self.todo_list.complete_todo(todo=todo, completion=checked)
+        self.refresh_item_attributes()
+
+    # refreshes the attributes for all of the items
+    def refresh_item_attributes(self):
+        for item in self.items:
+            item.refresh_attributes()
+
+    # retrieves an item's associated todo, based on the item's item id
+    def get_item_todo(self, item : TodoViewItem):
+        return self.todo_list.get_todo(item.item_id)
 
     # detects if ENTER/Return key is released while over a todoviewitem to enable/complete edit
     def keyReleaseEvent(self, a0):
