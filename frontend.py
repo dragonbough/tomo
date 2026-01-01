@@ -1,7 +1,7 @@
 import sys
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QHeaderView, QHBoxLayout, QCheckBox, QLineEdit, QLabel)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QHeaderView, QHBoxLayout, QCheckBox, QLineEdit, QLabel, QComboBox, QPushButton)
 
 import todos
 import tomos
@@ -53,9 +53,18 @@ class TodoViewItem(QTreeWidgetItem):
         # creating line_edit for editing labels
         self.line_edit = QLineEdit()
 
-        # creates difficulty column based on the todo's difficulty
-        difficulties =  {1: "Trivial",  2: "Easy",  3: "Normal",  4: "Hard"}
-        self.setText(1, difficulties[my_todo.difficulty])
+        # creating difficulty dropdown + label -- used to set todo's difficulty
+        difficulties = ["Trivial", "Easy", "Normal", "Hard"]
+        self.difficulty_dropdown = QComboBox()
+        self.difficulty_dropdown.addItems(difficulties)
+        self.difficulty_dropdown.setCurrentIndex(my_todo.difficulty - 1)
+
+        self.difficulty_label = QLabel(difficulties[my_todo.difficulty - 1])
+
+        self.difficulty_widget = QWidget()
+        self.difficulty_layout = QHBoxLayout()
+        self.difficulty_layout.addWidget(self.difficulty_label)
+        self.difficulty_widget.setLayout(self.difficulty_layout)
 
         # creates children todoview items for each child in my_todo
         self.addChildren([TodoViewItem(child.todo_id, self.todo_view) for child in my_todo.children])
@@ -65,7 +74,7 @@ class TodoViewItem(QTreeWidgetItem):
         my_todo = self.todo_view.get_item_todo(self)
         self.item_checkbox.setChecked(my_todo.completed)
 
-    # turns the QLabel into QLineEdit, allowing user to change what was there
+    # turns the todo name QLabel into QLineEdit and todo difficulty QLabel into QComboBox, allowing user to remame todo and change difficulty
     def enable_edit(self):
 
         item_text = self.item_label.text()
@@ -76,9 +85,15 @@ class TodoViewItem(QTreeWidgetItem):
         self.item_layout.addWidget(self.line_edit)
         self.line_edit.setVisible(True)
 
+        self.difficulty_layout.removeWidget(self.difficulty_label)
+        self.difficulty_label.setVisible(False)
+
+        self.difficulty_layout.addWidget(self.difficulty_dropdown)
+        self.difficulty_dropdown.setVisible(True)
+
         self.line_edit.setFocus()
 
-    # completes the edit in the qlineedit, renaming the todos and replacing it with a qlabel again
+    # completes the edit in the qlineedit and qcombobox, renaming the todos and setting new difficulties before replacing both forms with a qlabel
     def complete_edit(self):
 
         new_text = self.line_edit.text()
@@ -89,8 +104,18 @@ class TodoViewItem(QTreeWidgetItem):
         self.item_layout.addWidget(self.item_label)
         self.item_label.setVisible(True)
 
+        new_difficulty = self.difficulty_dropdown.currentIndex() + 1
+        difficulty_text = self.difficulty_dropdown.itemText(new_difficulty - 1)
+        self.difficulty_layout.removeWidget(self.difficulty_dropdown)
+        self.difficulty_dropdown.setVisible(False)
+
+        self.difficulty_label.setText(difficulty_text)
+        self.difficulty_layout.addWidget(self.difficulty_label)
+        self.difficulty_label.setVisible(True)
+
         my_todo = self.todo_view.todo_list.get_todo(self.item_id)
         my_todo.name = new_text
+        my_todo.difficulty = new_difficulty
 
 # collection of TodoViewItems that is viewed in window
 class TodoView(QTreeWidget):
@@ -102,18 +127,18 @@ class TodoView(QTreeWidget):
         self.items = []
         self.items : list[TodoViewItem]
 
-        # sets up each column of the todo view, ensuring they resize to contents and the last column isnt stretched
+        # sets up each column of the todo view, ensuring they resize to contents and the last column is stretched so that it fits
         self.setHeaderLabels(["To-dos", "Difficulty"])
         self.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.header().setStretchLastSection(False)
+        self.header().setStretchLastSection(True)
 
+        self.setMaximumWidth(450)
 
         # adds top level items for the root nodes in the todo list
         todo_view_roots = [TodoViewItem(root_todo.todo_id, self) for root_todo in todo_list.get_roots()]
         self.addTopLevelItems(todo_view_roots)
 
-
-        # for each todoviewitem in todoview, set its content to its item_widget (checkbox and label)
+        # for each todoviewitem in todoview, set its content to its item_widget (checkbox, name/difficulty label)
         for item in self.items:
 
             item : TodoViewItem
@@ -121,14 +146,19 @@ class TodoView(QTreeWidget):
             self.setItemWidget(item, 0, item.item_widget)
             item.item_widget.adjustSize()
             item.setSizeHint(0, item.item_widget.sizeHint())
-            item.item_widget.show()
+
+            self.setItemWidget(item, 1, item.difficulty_widget)
+            item.difficulty_widget.adjustSize()
+            item.setSizeHint(1, item.difficulty_widget.sizeHint())
 
         # if an item is being edited or not
         self.editing_item = None
 
+        # automatic adjusting to size of whatever is in the widget, as items are expanded/collapsed
         self.setSizeAdjustPolicy(self.SizeAdjustPolicy.AdjustToContents)
         self.itemExpanded.connect(self.adjustSize)
         self.itemCollapsed.connect(self.adjustSize)
+
 
     # changes todo completion when an items checkbox is checked
     def item_checked(self, checked : bool, todo_view_item : TodoViewItem):
