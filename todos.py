@@ -193,6 +193,9 @@ class TodoList():
     def check_if_completed(self, todo : Todo):
         completed = not([child for child in todo.children if child.completed == False])
         todo.completed = completed
+        # ensures that parents of parents are also updated in response to completion if needed
+        if todo.parent:
+            self.check_if_completed(todo.parent)
 
     #formats all Todo data into a dictionary for DB
     def unpack_todos(self, *todos : Todo):
