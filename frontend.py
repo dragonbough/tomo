@@ -148,10 +148,9 @@ class TodoViewItem(QTreeWidgetItem):
 
         if self.item_id:
             my_todo = self.todo_view.todo_list.get_todo(self.item_id)
-            my_todo.name = new_text
-            my_todo.difficulty = new_difficulty
+            self.todo_view.todo_list.rename_todo(my_todo, new_text)
+            self.todo_view.todo_list.set_todo_difficulty(my_todo, new_difficulty)
         else:
-            print("Creating new todo")
             parent = self.parent()
             parent : TodoViewItem
             parent_todo = self.todo_view.get_item_todo(parent)
@@ -201,6 +200,7 @@ class TodoView(QTreeWidget):
         self.editing_item = None
         # if ENTER/Return Key is pressed or an item is double clicked -- toggle edit of the item
         self.itemActivated.connect(self.toggle_edit)
+        self.setExpandsOnDoubleClick(False)
 
         # automatic adjusting to size of whatever is in the widget, as items are expanded/collapsed
         self.setSizeAdjustPolicy(self.SizeAdjustPolicy.AdjustToContents)
@@ -294,12 +294,21 @@ class TodoView(QTreeWidget):
             item.difficulty_widget.adjustSize()
             item.setSizeHint(1, item.difficulty_widget.sizeHint())
 
+    # occurences that occur on quit -- currently editing items are completed, and the changes are synced to the DB
+    def quit_proc(self):
+
+        if self.editing_item:
+            self.editing_item.complete_edit()
+        self.todo_list.empty_bin()
 
 # sys.argv allows arguments to be passed into the QApplication from the command line
 app = QApplication(sys.argv)
 
 todo_view = TodoView(todos.TodoList.get_user_todos())
 todo_view.show()
+
+# when the overall application is closed carry out the quit procedure for the todoview
+app.lastWindowClosed.connect(todo_view.quit_proc)
 
 # starts app event loop
 app.exec()
