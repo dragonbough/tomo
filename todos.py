@@ -173,6 +173,8 @@ class TodoList():
         todo.local = True
         self.add_todos(todo)
         self.bin_todo(todo, "modify")
+        # if needed:
+        return todo
 
     #completes todo recursively
     def complete_todo(self, todo : Todo, completion : bool = None):
