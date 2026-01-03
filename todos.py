@@ -176,7 +176,7 @@ class TodoList():
         # if needed:
         return todo
 
-    #completes todo recursively
+    #completes todo recursively and bins each one for modifying
     def complete_todo(self, todo : Todo, completion : bool = None):
         if completion == None:
             completion = not todo.completed
@@ -186,15 +186,31 @@ class TodoList():
         if todo.completed == True:
             events.todo_topic.get_event("TODO_COMPLETED").trigger(todo)
 
+        self.bin_todo(todo, "modify")
+
         for child in todo.children:
             self.complete_todo(child, completion)
         if todo.parent:
             self.check_if_completed(todo.parent)
 
+    # changes todo's name before binning it for modifying
+    def rename_todo(self, todo : Todo, name : str):
+        todo.name = name
+        self.bin_todo(todo, "modify")
+
+    # changes todo's difficulty before binning it for modifying
+    def set_todo_difficulty(self, todo : Todo, difficulty : int):
+        todo.difficulty = difficulty
+        self.bin_todo(todo, "modify")
+
     #todo checks for completion based on whether all the children are completed or not
     def check_if_completed(self, todo : Todo):
         completed = not([child for child in todo.children if child.completed == False])
+
         todo.completed = completed
+
+        self.bin_todo(todo)
+
         # ensures that parents of parents are also updated in response to completion if needed
         if todo.parent:
             self.check_if_completed(todo.parent)
@@ -303,7 +319,6 @@ if __name__ == "__main__":
 
                 if user_input == "m":
                     user_todo_list.complete_todo(selected_todo)
-                    user_todo_list.bin_todo(selected_todo, "modify")
 
                 elif user_input == "a":
                     todo_name = input("To-do Name: ")
@@ -312,18 +327,17 @@ if __name__ == "__main__":
                         todo_difficulty = int(input("To-do Difficulty: [1] Trivial  [2] Easy  [3] Normal  [4] Hard\n"))
                     user_todo_list.create_todo(name=todo_name, parent=selected_todo, difficulty=todo_difficulty)
 
-
                 if user_input == "s":
                     edit_option = input(f"[A] Name  [S] Difficulty [D] Parent\n").lower()
 
                     if edit_option == "a":
-                        selected_todo.name = input("\nEdit To-do Name: ")
+                        user_todo_list.rename_todo(selected_todo, input("\nEdit To-do Name: "))
 
                     elif edit_option == "s":
                         todo_difficulty = -1
                         while not(1 <= todo_difficulty <= 4):
                             todo_difficulty = int(input("Edit To-do Difficulty: [1] Trivial  [2] Easy  [3] Normal  [4] Hard\n"))
-                        selected_todo.difficulty = todo_difficulty
+                        user_todo_list.set_todo_difficulty(selected_todo.difficulty, todo_difficulty)
 
                     elif edit_option == "d":
                         clear_screen()
