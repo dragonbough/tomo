@@ -215,6 +215,11 @@ class TodoList():
         if todo.parent:
             self.check_if_completed(todo.parent)
 
+    # wrapper function for the frontend, encapsulates binning system
+    def delete_todo(self, todo : Todo):
+
+        self.bin_todo(todo, "delete")
+
     #formats all Todo data into a dictionary for DB
     def unpack_todos(self, *todos : Todo):
         todo_data = []
