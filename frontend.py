@@ -1,7 +1,11 @@
 import sys
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QHeaderView, QHBoxLayout, QCheckBox, QLineEdit, QLabel, QComboBox, QToolButton, QSpacerItem, QSizePolicy)
+from PyQt6.QtWidgets import (QWidget, QApplication,
+                             QTreeWidget, QTreeWidgetItem, QHeaderView,
+                             QHBoxLayout, QCheckBox, QLineEdit,
+                             QLabel, QComboBox, QToolButton,
+                             QSpacerItem, QSizePolicy, QMessageBox)
 from PyQt6.QtGui import QIcon
 
 import todos
@@ -13,11 +17,6 @@ import signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 
-class Window(QMainWindow):
-
-    def __init__(self):
-        super().__init__()
-
 # individual item containing a single Todo's information -- does not store Todo contents but acts as reference to the backend Todo object via todo_id
 class TodoViewItem(QTreeWidgetItem):
 
@@ -27,16 +26,15 @@ class TodoViewItem(QTreeWidgetItem):
         self.item_id = todo_id
 
         # references self in the todo_view + references todo_view in self for easy access
-        todo_view.items.append(self)
         self.todo_view = todo_view
+        self.todo_view.add_todo_item(self)
 
         # creating text and checkbox widgets
         self.item_label = QLabel()
         self.item_checkbox = QCheckBox()
         # checkbox can only focus with clicks instead of tab/space
         self.item_checkbox.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
-        # checkbox triggers the todo completion by todoview
-        # ensure it is the "clicked" signal as otherwise setCheckState calls will trigger this too
+        # checkbox triggers the todo completion by todoview -- ensure it is the "clicked" signal as otherwise setCheckState calls will trigger this too
         self.item_checkbox.clicked.connect(lambda checked : self.todo_view.item_checked(checked, self))
 
         # creating difficulty dropdown + label -- used to set todo's difficulty
@@ -61,18 +59,25 @@ class TodoViewItem(QTreeWidgetItem):
         # creating line_edit for editing labels
         self.line_edit = QLineEdit()
 
-        # creating button to add more todos
+        # creating button to add more todos / delete todos
         self.add_button = QToolButton()
-        system_add_button_icon = QIcon.ThemeIcon.ListAdd
+        system_add_icon = QIcon.ThemeIcon.ListAdd
         add_button_icon = QIcon("guicons/plus.png")
-        self.add_button.setIcon(QIcon.fromTheme(system_add_button_icon, add_button_icon))
-        self.add_button.clicked.connect(lambda : self.todo_view.add_todo_item(self))
+        self.add_button.setIcon(QIcon.fromTheme(system_add_icon, add_button_icon))
+        self.add_button.clicked.connect(lambda : self.todo_view.create_todo_item(self))
 
-        # adds spacer so the add button is always at the end of the item_widget
+        self.delete_button = QToolButton()
+        system_delete_icon = QIcon.ThemeIcon.EditDelete
+        self.delete_button.setIcon(QIcon.fromTheme(system_delete_icon))
+        self.delete_button.clicked.connect(lambda : self.todo_view.show_delete_dialog(self))
+
+        # adds spacer so the add/delete button is always at the end of the item_widget
         self.item_layout.addSpacerItem(QSpacerItem(20, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed))
         self.item_layout.addWidget(self.add_button)
+        self.item_layout.addWidget(self.delete_button)
 
         self.add_button.setVisible(False)
+        self.delete_button.setVisible(False)
 
         # so that hovering can be detected for displaying self.add_button
         self.item_widget.setMouseTracking(True)
@@ -81,6 +86,9 @@ class TodoViewItem(QTreeWidgetItem):
 
             # gets its todo and extracts any important info -- does not save in the view item for decoupling purposes
             my_todo = self.todo_view.get_item_todo(self)
+
+            if my_todo.deleted:
+                self.todo_view.mark_item_deleted(self)
 
             self.item_label.setText(my_todo.name)
             self.item_checkbox.setChecked(my_todo.completed)
@@ -120,6 +128,7 @@ class TodoViewItem(QTreeWidgetItem):
         self.difficulty_dropdown.setVisible(True)
 
         self.line_edit.setFocus()
+        self.line_edit.selectAll()
 
     # completes the edit in the qlineedit and qcombobox, renaming the todos and setting new difficulties before replacing both forms with a qlabel
     # if the item has no item_id, will create a todo with the given text and difficulty
@@ -158,12 +167,18 @@ class TodoViewItem(QTreeWidgetItem):
             self.item_id = my_todo.todo_id
 
     # shows the button used to add todo items
-    def toggle_add_button(self, toggle : bool):
+    def toggle_item_buttons(self, toggle : bool):
         self.add_button.setVisible(toggle)
+        self.delete_button.setVisible(toggle)
         self.item_widget.adjustSize()
+
 
 # collection of TodoViewItems that is viewed in window
 class TodoView(QTreeWidget):
+
+    @staticmethod
+    def get_user_todo_view():
+        return TodoView(todos.TodoList.get_user_todos())
 
     def __init__(self, todo_list : todos.TodoList):
         super().__init__()
@@ -171,6 +186,8 @@ class TodoView(QTreeWidget):
         self.todo_list = todo_list
         self.items = []
         self.items : list[TodoViewItem]
+        self.deleted_items = []
+        self.deleted_items : list[TodoViewItem]
 
         # sets up each column of the todo view, ensuring they resize to contents and the last column is stretched so that it fits
         self.setHeaderLabels(["To-dos", "Difficulty"])
@@ -210,17 +227,22 @@ class TodoView(QTreeWidget):
         # hovering over an todoviewitem shows its add button -- mouse tracking has to be True for this to work
         self.setMouseTracking(True)
 
+    # keeps reference to todoviewitem in self.items
+    def add_todo_item(self, item : TodoViewItem):
+        if item not in self.items:
+            self.items.append(item)
+
     # recreates the todo items
     def recreate_todo_items(self):
 
         self.clear()
-
+        self.items = []
+        todo_view_roots = [TodoViewItem(root_todo.todo_id, self) for root_todo in self.todo_list.get_roots()]
         self.addTopLevelItems(todo_view_roots)
 
         # for each todoviewitem in todoview, set its content to its item_widget (checkbox, name/difficulty label)
-        self.reset_item_widgets()
-
-        todo_view_roots = [TodoViewItem(root_todo.todo_id, self) for root_todo in todo_list.get_roots()]
+        self.reset_items()
+        self.adjustSize()
 
     # changes todo completion when an items checkbox is checked
     def item_checked(self, checked : bool, todo_view_item : TodoViewItem):
@@ -243,11 +265,11 @@ class TodoView(QTreeWidget):
         hovered_item = self.itemAt(event.pos())
         if hovered_item in self.items:
             hovered_item : TodoViewItem
-            hovered_item.toggle_add_button(True)
+            hovered_item.toggle_item_buttons(True)
 
         for item in self.items:
             if item != hovered_item and item.isSelected() != True:
-                item.toggle_add_button(False)
+                item.toggle_item_buttons(False)
 
         self.resizeColumnToContents(0)
         self.resizeColumnToContents(1)
@@ -269,20 +291,37 @@ class TodoView(QTreeWidget):
                 self.editing_item = item
 
     # creates an empty todoviewitem under a provided parent, which turns into an empty, editable item
-    def add_todo_item(self, parent : TodoViewItem = None):
+    def create_todo_item(self, parent : TodoViewItem = None):
 
         new_todo_item = TodoViewItem(todo_id=None, todo_view=self)
         if parent:
             parent.addChild(new_todo_item)
-        self.reset_item_widgets()
+        self.reset_items()
         self.expandItem(parent)
         self.setCurrentItem(new_todo_item)
         self.toggle_edit(new_todo_item)
 
-    # resets all of the widgets for each todoviewitem
-    def reset_item_widgets(self):
+    # deletes an item's todo before refreshing all of the items
+    def delete_item_todo(self, item : TodoViewItem):
+
+        if item == self.editing_item:
+            item.complete_edit()
+        item_todo = self.get_item_todo(item)
+        self.todo_list.delete_todo(item_todo)
+        self.recreate_todo_items()
+
+    # marks an item as deleted
+    def mark_item_deleted(self, item : TodoViewItem):
+        if item not in self.deleted_items:
+            self.deleted_items.append(item)
+
+    # resets all of the items, applying a widget to each and deleting the ones marked as deleted
+    def reset_items(self):
 
         for item in self.items:
+
+            if item in self.deleted_items and item.parent():
+                item.parent().removeChild(item)
 
             item : TodoViewItem
 
@@ -294,6 +333,18 @@ class TodoView(QTreeWidget):
             item.difficulty_widget.adjustSize()
             item.setSizeHint(1, item.difficulty_widget.sizeHint())
 
+    # shows a message box for confirmation before deleting a todo item
+    def show_delete_dialog(self, item : TodoViewItem):
+
+        self.delete_dialog = QMessageBox(self)
+        self.delete_dialog.setIcon(QMessageBox.Icon.Question)
+        self.delete_dialog.setInformativeText("Are you sure?")
+        self.delete_dialog.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        self.delete_dialog.setDefaultButton(QMessageBox.StandardButton.No)
+        choice = self.delete_dialog.exec()
+        if choice == QMessageBox.StandardButton.Yes:
+            self.delete_item_todo(item)
+
     # occurences that occur on quit -- currently editing items are completed, and the changes are synced to the DB
     def quit_proc(self):
 
@@ -304,7 +355,7 @@ class TodoView(QTreeWidget):
 # sys.argv allows arguments to be passed into the QApplication from the command line
 app = QApplication(sys.argv)
 
-todo_view = TodoView(todos.TodoList.get_user_todos())
+todo_view = TodoView.get_user_todo_view()
 todo_view.show()
 
 # when the overall application is closed carry out the quit procedure for the todoview
