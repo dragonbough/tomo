@@ -1,17 +1,18 @@
-import os
+from pathlib import Path
+
 import sqlite3
 
 #if db doesn't exist in directory already, constructs db using schema commands
-if not os.path.isfile("tomo_data.db"):
+BASE_DIR = Path(__file__).resolve().parent
+db_path = BASE_DIR / "tomo_data.db"
+
+if not db_path.is_file():
 
     connection = sqlite3.connect("tomo_data.db")
     cursor = connection.cursor()
 
     #write-ahead logging -- increased performance benefit but won't work on network filesystems or read only DBs
     cursor.execute("PRAGMA journal_mode=WAL;")
-
-    #creates the sequence table so that auto increment works
-    cursor.execute("CREATE TABLE sqlite_sequence(name,seq);")
 
     # creates and populates the PomoDifficulties table (with default splits)
     cursor.executescript("""CREATE TABLE PomoDifficulties (Difficulty INTEGER PRIMARY KEY CHECK (Difficulty <= 4), FocusDuration INTEGER, RestDuration INTEGER);
@@ -46,7 +47,7 @@ if not os.path.isfile("tomo_data.db"):
 
 else:
 
-    connection = sqlite3.connect("tomo_data.db")
+    connection = sqlite3.connect(db_path)
 
     #rows are returned as indexed dictionary instead of tuples
     connection.row_factory = sqlite3.Row
