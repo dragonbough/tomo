@@ -1,6 +1,5 @@
 from threading import (Timer, Event)
-import events
-import data
+from . import events, data
 
 # right2clicky on StackOverflow --https://stackoverflow.com/a/48741004
 # Timer that iterates before executing function -- has its own thread

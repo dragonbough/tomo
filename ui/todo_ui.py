@@ -1,17 +1,14 @@
 import sys
 
+from core import todos
+
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QWidget, QApplication,
+from PyQt6.QtWidgets import (QWidget,
                              QTreeWidget, QTreeWidgetItem, QHeaderView,
                              QHBoxLayout, QCheckBox, QLineEdit,
                              QLabel, QComboBox, QToolButton,
                              QSpacerItem, QSizePolicy, QMessageBox)
 from PyQt6.QtGui import QIcon
-
-sys.path.append("../backend")
-import todos
-import tomos
-import pomos
 
 # allows closing the application using CTRL + C
 import signal
@@ -162,8 +159,8 @@ class TodoViewItem(QTreeWidgetItem):
             self.todo_view.todo_list.set_todo_difficulty(my_todo, new_difficulty)
         else:
             parent = self.parent()
-            parent : TodoViewItem
-            parent_todo = self.todo_view.get_item_todo(parent)
+            parent : TodoViewItem | None
+            parent_todo = self.todo_view.get_item_todo(parent) if parent else None
             my_todo = self.todo_view.todo_list.create_todo(name=new_text, parent=parent_todo, difficulty=new_difficulty)
             self.item_id = my_todo.todo_id
 
@@ -227,6 +224,10 @@ class TodoView(QTreeWidget):
 
         # hovering over an todoviewitem shows its add button -- mouse tracking has to be True for this to work
         self.setMouseTracking(True)
+
+        # if the todo list only features a new todo item then enable edit
+        if len(self.items) == 0:
+            self.create_todo_item()
 
     # keeps reference to todoviewitem in self.items
     def add_todo_item(self, item : TodoViewItem):
@@ -297,6 +298,8 @@ class TodoView(QTreeWidget):
         new_todo_item = TodoViewItem(todo_id=None, todo_view=self)
         if parent:
             parent.addChild(new_todo_item)
+        else:
+            self.addTopLevelItem(new_todo_item)
         self.reset_items()
         self.expandItem(parent)
         self.setCurrentItem(new_todo_item)
@@ -321,8 +324,12 @@ class TodoView(QTreeWidget):
 
         for item in self.items:
 
-            if item in self.deleted_items and item.parent():
-                item.parent().removeChild(item)
+            if item in self.deleted_items:
+                item_parent = item.parent()
+                if item_parent != None:
+                    item_parent.removeChild(item)
+                else:
+                    self.takeTopLevelItem(self.indexOfTopLevelItem(item))
 
             item : TodoViewItem
 
@@ -352,15 +359,3 @@ class TodoView(QTreeWidget):
         if self.editing_item:
             self.editing_item.complete_edit()
         self.todo_list.empty_bin()
-
-# sys.argv allows arguments to be passed into the QApplication from the command line
-app = QApplication(sys.argv)
-
-todo_view = TodoView.get_user_todo_view()
-todo_view.show()
-
-# when the overall application is closed carry out the quit procedure for the todoview
-app.lastWindowClosed.connect(todo_view.quit_proc)
-
-# starts app event loop
-app.exec()

@@ -1,9 +1,8 @@
-import data
 from datetime import datetime
 import sys
 import os
 from typing import Literal
-import events
+from . import data, events
 
 class Todo():
 
@@ -165,7 +164,7 @@ class TodoList():
             self.bin[bin_type].append(todo.todo_id)
 
     #creates a todo, adding it to todolist and binning it for modifying
-    def create_todo(self, name : str, parent : Todo, difficulty : int = 0):
+    def create_todo(self, name : str, parent : Todo | None, difficulty : int = 0):
         todo = Todo(name=name, difficulty=difficulty, parent=parent)
         #give the todo a temporary id before replacing when saved to DB
         #setting the local attribute to True to make sure DB knows it doesnt exist in DB yet
