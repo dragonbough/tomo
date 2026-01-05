@@ -1,8 +1,8 @@
 /venv
 *.code-workspace
-/__pycache__
+**/__pycache__/**
 *.db
 /lib
 *.db-shm
 *.db-wal
-
+/.vscode

@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (QWidget, QApplication,
                              QSpacerItem, QSizePolicy, QMessageBox)
 from PyQt6.QtGui import QIcon
 
+sys.path.append("../backend")
 import todos
 import tomos
 import pomos
