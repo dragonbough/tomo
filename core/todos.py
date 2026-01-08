@@ -208,7 +208,7 @@ class TodoList():
 
         todo.completed = completed
 
-        self.bin_todo(todo)
+        self.bin_todo(todo, "modify")
 
         # ensures that parents of parents are also updated in response to completion if needed
         if todo.parent:
