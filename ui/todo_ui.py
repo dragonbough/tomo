@@ -2,15 +2,16 @@ from core import todos
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (QWidget, QTreeWidget, QTreeWidgetItem,
-                             QHeaderView, QHBoxLayout, QCheckBox,
-                             QLineEdit, QLabel, QComboBox,
-                             QToolButton, QSpacerItem, QMessageBox,
-                             QSizePolicy)
+                             QHBoxLayout, QCheckBox, QLineEdit,
+                             QLabel, QComboBox, QToolButton,
+                             QMessageBox, QSizePolicy)
 from PyQt6.QtGui import QIcon
 
-# allows closing the application using CTRL + C
+# DEBUG
+# allows closing the application using CTRL + C (DEBUG)
 import signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
+from PyQt6 import sip
 
 # individual item containing a single Todo's information -- does not store Todo contents but acts as reference to the backend Todo object via todo_id
 class TodoViewItem(QTreeWidgetItem):
@@ -42,6 +43,9 @@ class TodoViewItem(QTreeWidgetItem):
         self.item_layout.addWidget(self.item_label)
         self.item_widget.setLayout(self.item_layout)
 
+        # so that hovering can be detected for displaying self.add_button/self.delete_buttons
+        self.item_widget.setMouseTracking(True)
+
         # creating difficulty dropdown + label -- used to set todo's difficulty
         difficulties = ["Trivial", "Easy", "Normal", "Hard"]
         self.difficulty_dropdown = QComboBox()
@@ -52,6 +56,8 @@ class TodoViewItem(QTreeWidgetItem):
         self.difficulty_layout = QHBoxLayout()
         self.difficulty_layout.addWidget(self.difficulty_label)
         self.difficulty_widget.setLayout(self.difficulty_layout)
+
+        self.difficulty_widget.setMouseTracking(True)
 
         # creating button to add more todos / delete todos
         self.add_button = QToolButton()
@@ -69,12 +75,18 @@ class TodoViewItem(QTreeWidgetItem):
         self.delete_button.setVisible(False)
 
         # adds spacer so the add/delete button is always at the end of the item_widget
-        self.item_layout.addSpacerItem(QSpacerItem(150, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed))
+        self.item_layout.addStretch(1)
+
         self.item_layout.addWidget(self.add_button)
         self.item_layout.addWidget(self.delete_button)
 
-        # so that hovering can be detected for displaying self.add_button/self.delete_button
-        self.item_widget.setMouseTracking(True)
+        # the buttons maintain their space in the item_widget even when hidden
+        add_button_sp = self.add_button.sizePolicy()
+        delete_button_sp = self.delete_button.sizePolicy()
+        add_button_sp.setRetainSizeWhenHidden(True)
+        delete_button_sp.setRetainSizeWhenHidden(True)
+        self.add_button.setSizePolicy(add_button_sp)
+        self.delete_button.setSizePolicy(delete_button_sp)
 
         # checks to see if the todoviewitem is not a newly created todo -- if it is it wont have an item_id
         if self.item_id:
@@ -152,16 +164,17 @@ class TodoViewItem(QTreeWidgetItem):
             self.todo_view.todo_list.rename_todo(my_todo, new_text)
             self.todo_view.todo_list.set_todo_difficulty(my_todo, new_difficulty)
         else:
-            parent : TodoViewItem | None = self.parent()
+            parent : TodoViewItem = self.parent()
             parent_todo = self.todo_view.get_item_todo(parent) if parent else None
             my_todo = self.todo_view.todo_list.create_todo(name=new_text, parent=parent_todo, difficulty=new_difficulty)
             self.item_id = my_todo.todo_id
 
     # shows the button used to add todo items
     def toggle_item_buttons(self, toggle : bool):
+
         self.add_button.setVisible(toggle)
         self.delete_button.setVisible(toggle)
-        self.item_widget.adjustSize()
+
 
 # collection of TodoViewItems that is viewed in window
 class TodoView(QTreeWidget):
@@ -176,12 +189,13 @@ class TodoView(QTreeWidget):
         self.todo_list = todo_list
         self.items : list[TodoViewItem] = []
 
-        # sets up each column of the todo view, ensuring they resize to contents and the last column is stretched so that it fits
+        # sets up each column of the todo view
         self.setHeaderLabels(["", "Difficulty"])
-        self.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        # whenever a column is resized ensure it meets a certain width
-        self.header().sectionResized.connect(self.adjust_col_width)
-        self.setUniformRowHeights(False)
+        self.header().setStretchLastSection(False)
+        self.setUniformRowHeights(True)
+
+        self.min_todo_width = 400
+        self.max_difficulty_width = 100
 
         # adds top level items for the root nodes in the todo list
         todo_view_roots = [TodoViewItem(root_todo.todo_id, self) for root_todo in todo_list.get_roots()]
@@ -190,25 +204,27 @@ class TodoView(QTreeWidget):
         # sets the widgets for each item
         self.set_item_widgets()
 
-        # if an item is being edited or not
+        # editing of items
         self.editing_item = None
-        # if ENTER/Return Key is pressed or an item is double clicked -- toggle edit of the item
         self.itemActivated.connect(self.toggle_edit)
         self.setExpandsOnDoubleClick(False)
 
         self.forget_dialog_box = False
 
-        # automatic adjusting to size of whatever is in the widget, as items are expanded/collapsed
+        # automatic adjusting of window size to size of whatever is in the widget, as items are expanded/collapsed
         self.setSizeAdjustPolicy(self.SizeAdjustPolicy.AdjustToContents)
-        self.itemExpanded.connect(self.adjustSize)
-        self.itemCollapsed.connect(self.adjustSize)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        self.itemExpanded.connect(self.resize_self)
+        self.itemCollapsed.connect(self.resize_self)
 
         # hovering over an todoviewitem shows its add button -- mouse tracking has to be True for this to work
         self.setMouseTracking(True)
+        self.current_hover_item : TodoViewItem = None
 
         self.init_add_button_item(refresh=False)
-        self.adjust_col_width()
-        self.resize_to_items()
+
+        self.resize_self()
 
     # keeps reference to todoviewitem in self.items
     def add_todo_item(self, item : TodoViewItem):
@@ -222,10 +238,7 @@ class TodoView(QTreeWidget):
     # initialises the add_button item, a qtreewidgetitem that allows you to add a todo
     def init_add_button_item(self, refresh : bool = True):
 
-        if refresh == True:
-            self.takeTopLevelItem(self.indexOfTopLevelItem(self.add_button_item))
-
-        self.add_button_item = QTreeWidgetItem()
+        # we have to initialise the widgets every time because Qt automatically deletes a Qtreewidgetitem's widgets when taketoplevelitem() is called
         self.add_button_widget = QWidget()
         self.add_button_layout = QHBoxLayout()
         self.add_button_widget.setLayout(self.add_button_layout)
@@ -237,24 +250,33 @@ class TodoView(QTreeWidget):
 
         # has to be a lambda function to prevent passing in the boolean as an argument
         self.add_button.clicked.connect(lambda : self.create_todo_item())
-        self.itemClicked.connect(lambda item : self.create_todo_item() if item == self.add_button_item else None)
-        self.itemEntered.connect(lambda item : [todo_item.toggle_item_buttons(False) for todo_item in self.items if item == self.add_button_item])
+        self.add_button_widget.setMouseTracking(True)
 
         self.add_label = QLabel()
         self.add_label.setText("<i>Add To-do<i>")
         self.add_label.setTextFormat(Qt.TextFormat.RichText)
 
         self.add_button_layout.addWidget(self.add_button, 0, Qt.AlignmentFlag.AlignLeft)
+
         # if there are no todoviewitems then display the "add todo" label
         if len(self.items) == 0:
             self.add_button_layout.addWidget(self.add_label, 0, Qt.AlignmentFlag.AlignLeft)
 
-        self.addTopLevelItem(self.add_button_item)
-        self.add_button_item.setFlags(Qt.ItemFlag.ItemNeverHasChildren)
+        if refresh == False:
+
+            self.add_button_item = QTreeWidgetItem()
+            self.itemClicked.connect(lambda item : self.create_todo_item() if item == self.add_button_item else None)
+            self.addTopLevelItem(self.add_button_item)
+            self.add_button_item.setFlags(Qt.ItemFlag.ItemNeverHasChildren)
+            self.add_button_item.setFirstColumnSpanned(True)
+
+        else:
+
+            self.add_button_item = self.takeTopLevelItem(self.indexOfTopLevelItem(self.add_button_item))
+            self.addTopLevelItem(self.add_button_item)
 
         self.setItemWidget(self.add_button_item, 0, self.add_button_widget)
         self.add_button_item.setSizeHint(0, self.add_button_widget.sizeHint())
-        self.add_button_widget.adjustSize()
 
     # for each todoviewitem in todoview, set its content to its item_widget (checkbox, name/difficulty label)
     def set_item_widgets(self):
@@ -263,11 +285,9 @@ class TodoView(QTreeWidget):
 
             self.setItemWidget(item, 0, item.item_widget)
             item.setSizeHint(0, item.item_widget.sizeHint())
-            item.item_widget.adjustSize()
 
             self.setItemWidget(item, 1, item.difficulty_widget)
             item.setSizeHint(1, item.difficulty_widget.sizeHint())
-            item.difficulty_widget.adjustSize()
 
     # changes todo completion when an items checkbox is checked
     def item_checked(self, checked : bool, todo_view_item : TodoViewItem):
@@ -284,13 +304,23 @@ class TodoView(QTreeWidget):
 
     # shows/hides button used to add todos/subtodos
     def mouseMoveEvent(self, event):
+
+        hovered_widget = self.viewport().childAt(event.pos())
         hovered_item = self.itemAt(event.pos())
 
+        if self.current_hover_item == hovered_item:
+            return
+
         for item in self.items:
-            if item == hovered_item:
-                item.toggle_item_buttons(True)
-            else:
-                item.toggle_item_buttons(False)
+            item.toggle_item_buttons(False)
+
+        if hovered_item:
+            self.current_hover_item = hovered_item
+        elif hovered_widget:
+            self.current_hover_item = hovered_widget.parent()
+
+        if type(self.current_hover_item) == TodoViewItem:
+            self.current_hover_item.toggle_item_buttons(True)
 
         self.adjust_col_width()
 
@@ -331,9 +361,7 @@ class TodoView(QTreeWidget):
         self.setCurrentItem(new_todo_item)
         self.toggle_edit(new_todo_item)
         self.init_add_button_item()
-        self.resize_to_items()
-        self.adjust_col_width()
-        self.adjustSize()
+        self.resize_to_item_heights()
 
     # shows a message box for confirmation before deleting a todo item
     def show_delete_dialog(self):
@@ -370,7 +398,6 @@ class TodoView(QTreeWidget):
             self.todo_list.delete_todo(self.get_item_todo(item))
         for item in self.get_deleted_items():
             self.delete_item(item)
-        self.init_add_button_item()
 
     def delete_item(self, item : TodoViewItem):
         if item not in self.items:
@@ -382,19 +409,36 @@ class TodoView(QTreeWidget):
             item_parent.removeChild(item)
         else:
             self.takeTopLevelItem(self.indexOfTopLevelItem(item))
-        self.resize_to_items()
-        self.adjust_col_width()
+        self.resize_to_item_heights()
 
-    def resize_to_items(self):
+    # resizes the item heights to content
+    def resize_to_item_heights(self):
         min_height = self.visualItemRect(self.add_button_item).height() + self.header().height() + 5
-        max_height = 800
+        max_height = 500
         for item in self.items:
+            if item.parent() and not item.parent().isExpanded():
+                continue
             min_height += self.visualItemRect(item).height()
         self.setFixedHeight(min(min_height, max_height))
 
-    def adjust_col_width(self, column : int = 0, old_width : int = 0, new_width : int = 0):
-        if column == 0 and new_width < 350:
-            self.setColumnWidth(column, 350)
+    def adjust_col_width(self):
+
+        # resizing the todo column width
+        if self.columnWidth(0) < self.min_todo_width:
+            self.setColumnWidth(0, self.min_todo_width)
+
+        # resizing the difficulty column width
+        if self.columnWidth(1) > self.max_difficulty_width:
+            self.setColumnWidth(1, self.max_difficulty_width)
+
+        # adjusts the window size to fit the col width change
+        self.adjustSize()
+        self.setFixedWidth(self.columnWidth(0) + self.columnWidth(1))
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+    def resize_self(self):
+        self.resize_to_item_heights()
+        self.adjust_col_width()
 
     # occurences that occur on quit -- currently editing item is completed, and the changes are synced to the DB
     def quit_proc(self):
