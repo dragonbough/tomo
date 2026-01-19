@@ -1,6 +1,4 @@
-import data
-import events
-# import math
+from . import data, events
 
 #class defining a state in a state machine
 class State():
@@ -276,7 +274,7 @@ class UserTomos():
 
     # returns all of the user's tomos
     def get_tomos(self) -> list[Tomo]:
-        return self.tomos.values()
+        return list(self.tomos.values())
 
     # returns a specific tomo based on its id
     def get_tomo(self, base_tomo_id : int):
