@@ -217,7 +217,7 @@ class UserTomos():
         self.current_tomo = None
 
         # registers xp increase of selected tomo to the todo completion event
-        func = lambda todo : self.current_tomo.increase_xp(todo.difficulty) if self.current_tomo else print("No tomo selected")
+        func = lambda todo : self.current_tomo.increase_stat(xp=todo.difficulty) if self.current_tomo else print("No tomo selected")
         events.todo_topic.get_event("TODO_COMPLETED").register(func)
 
     # the events that occur when a todo is completed
