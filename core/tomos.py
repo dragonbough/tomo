@@ -90,7 +90,6 @@ class BaseTomo():
         tomo_levels = dict(sorted(self.levels.items(), key=lambda item: item[0]))
         for level in tomo_levels:
             current_level = level
-            print(self.levels)
             if self.get_level_stats(level)["required_xp"] > xp:
                 return current_level
         return current_level
@@ -144,6 +143,7 @@ class Tomo():
                 raise TypeError("Invalid XP increase value")
             self.xp += xp
             print(f"{self.name}'s XP increased by {xp}!")
+            events.tomo_topic.get_event("XP_INCREASED").trigger(self)
             self.check_for_level()
         self.updated = True
 
