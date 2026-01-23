@@ -5,14 +5,14 @@ program_start_time = time.time()
 
 # returns the current time in seconds since the program started
 def get_program_elapsed():
-    return program_start_time - time.time()
+    return time.time() - program_start_time
 
 class Observable():
 
     def __init__(self, event_name : str):
         self.name = event_name
         # All of the functions that occur when this event is triggered
-        self.callbacks = []
+        self.callbacks : list[function] = []
         self.topic = None
         self.topic : "Topic"
 
@@ -24,12 +24,19 @@ class Observable():
 
     # triggers all of the registered functions
     def trigger(self, *event_args):
+
+        print(f"\n{self.name} EVENT TRIGGERED")
+        print("-" * len(self.name + "EVENT TRIGGERED") )
+
         # callback_number = len(self.callbacks)
         # print(f"Executing {callback_number} callback{"s" if callback_number > 1 or callback_number == 0 else ""}...")
+
         self.topic.log_event(event_name=self.name, timestamp=get_program_elapsed())
+
         for callback in self.callbacks:
+            print(f"Executing {callback.__name__}")
             callback(*event_args)
-        # time.sleep(1)
+
 
 class Topic():
 
