@@ -172,9 +172,8 @@ class TodoViewItem(QTreeWidgetItem):
     # shows the button used to add todo items
     def toggle_item_buttons(self, toggle : bool):
 
-        if not self.todo_view.get_item_todo(self).deleted:
-            self.add_button.setVisible(toggle)
-            self.delete_button.setVisible(toggle)
+        self.add_button.setVisible(toggle)
+        self.delete_button.setVisible(toggle)
 
 
 # collection of TodoViewItems that is viewed in window
