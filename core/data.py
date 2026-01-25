@@ -213,7 +213,7 @@ def modify_tomo_data(*tomo_data : dict):
 ## POMO DATA ##
 
 # retrieves the user-saved pomodoro split data for each difficulty
-def retrieve_pomo_difficulties(*difficulties : int) -> dict[str : str]:
+def retrieve_pomo_difficulties(*difficulties : int) -> dict[str, str]:
     if difficulties:
         bindings = generate_bindings(difficulties)
         cursor.execute(f"SELECT * FROM PomoDifficulties WHERE Difficulty IN ({bindings})", difficulties)
