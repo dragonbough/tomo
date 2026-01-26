@@ -3,19 +3,26 @@ from . import data, events
 #class defining a state in a state machine
 class State():
 
-    def __init__(self, name : str, callback : callable):
+    def __init__(self, name : str, callback : callable = None):
         self.name = name
-        self.callback = callback
+        self.callback : callable = None
+        if callback:
+            self.set_callback(callback)
         # self.transitions = {transition : state}
         self.transitions = {}
 
     #executes the behaviour's function
     def execute(self, *args):
-        # print(f"Executing State: {self.name}")
-        # print(f"Executing State Transitions: {self.transitions}")
-        # print(f"Execution:", end=" ")
-        self.callback(*args)
+        print(f"TOMO SYSTEM: FSM -- Executing State: {self.name}")
+        if self.callback:
+            self.callback(*args)
         return
+
+    # sets this state's callback
+    def set_callback(self, callback : callable):
+        if not callable(callback):
+            raise TypeError(f"Invalid callback set for state {self.name}")
+        self.callback = callback
 
 #class defining the finite state machine
 class StateMachine():
@@ -23,10 +30,10 @@ class StateMachine():
     #defines the collection of states, the current state in the simulation of the FSM, the start state and the stop state
     def __init__(self):
         # self.states = {state_name : State}
-        self.states = {}
-        self.current_state = None
-        self.start_state = None
-        self.stop_state = None
+        self.states : dict[str, State] = {}
+        self.current_state : State = None
+        self.start_state : State = None
+        self.stop_state : State = None
 
     # returns all of the states in state machine
     def get_states(self):
@@ -41,16 +48,21 @@ class StateMachine():
         self.states[state.name] = state
         if len(self.states) == 1:
             self.start_state = state
-            print(f"Start State: {state.name}")
+            print(f"TOMO SYSTEM: FSM -- Start State: {state.name}")
 
     #adds transition between two states to FSM
     def add_transition(self, initial_state : State, transition_name : str, final_state : State):
         if transition_name not in initial_state.transitions:
             initial_state.transitions[transition_name] = final_state
-            # print(f"State Transitions: {initial_state.transitions}")
-            # print(f"Initial State: {initial_state.name}, Transition: {transition_name}, Final State: {final_state.name}")
         else:
             ValueError(f"Transition '{transition_name}' already exists for state")
+
+    # sets the callback for the specified state
+    def set_callback(self, state : State, callback : callable):
+        if state in self.states:
+            state.set_callback(callback)
+        else:
+            raise ValueError("State not a member of state machine")
 
     #deletes states from state machine
     def delete_state(self, *states : State):
@@ -64,21 +76,27 @@ class StateMachine():
     #transitions between the current state and the next state depending on given input
     def transition(self, input : str):
         if not self.current_state or input not in self.current_state.transitions:
-            raise KeyError(f"Invalid state machine input ('{input})")
+            raise KeyError(f"Invalid state machine input: {input}")
         else:
             self.current_state = self.current_state.transitions[input]
+            print(f"TOMO SYSTEM: FSM -- Switching state to {self.current_state.name}")
 
     #simulates a single step of the state machine
     def tick(self, input : str = None):
-        self.current_state : State
-        self.current_state.execute()
+        if not self.current_state:
+            if self.start_state:
+                self.current_state = self.start_state
+            else:
+                raise Exception("No state to tick FSM with")
+        # by default it will input the name of the state as an argument into its callback
+        self.current_state.execute(self.current_state.name)
         if input:
             self.transition(input)
 
 
 class BaseTomo():
 
-    def __init__(self, tomo_id : int, base_name : str, levels : dict[int : dict[str : int]]):
+    def __init__(self, tomo_id : int, base_name : str, levels : dict[int : dict[str, int]]):
         self.tomo_id = tomo_id
         self.base_name = base_name
         # {level : {"hp" : 1, "required_xp" : 1, "sprite" : File}}
@@ -107,8 +125,47 @@ class Tomo():
         self.hp = hp
         self.xp = xp
         self.bond_level = level
-        self.fsm = StateMachine()
         self.updated = False
+
+        self.fsm = StateMachine()
+
+        # ties every event in the tomo topic as a parameter into the update_fsm_event
+        for event in events.tomo_topic.get_events():
+            if event.name != "STATE_CHANGED":
+                event.register(self.check_for_fsm_input)
+
+        # precreating the tomo fsm -- eventually i will just be able to pass in some formatted file (maybe DOT) and then it will just save the states + transitions
+        self.fsm.add_state(State("idle"))
+        self.fsm.add_state(State("playful"))
+        self.fsm.add_transition(self.fsm.get_state("idle"), "high_xp_events", self.fsm.get_state("playful"))
+
+    # checks for transition, and if so, triggered STATE_CHANGED event -- also handles incorrect inputs without crashing program
+    def tick_fsm(self, input : str = None):
+        if input:
+            try:
+                self.fsm.tick(input)
+                events.tomo_topic.get_event("STATE_CHANGED").trigger(self)
+            except KeyError:
+                print(f"TOMO SYSTEM: FSM -- invalid input (\"{input}\") into state machine, executing regardless")
+                self.fsm.current_state.execute(self.fsm.current_state.name)
+
+
+    # checks for whether any requirements have been met to pass in a certain input into the finite state machine
+    def check_for_fsm_input(self):
+
+        fsm_input = None
+
+        # if the number of xp increased events in this session goes above a certain amount, then tick the fsm with the input high_xp_events
+        event_stream = events.tomo_topic.get_stream()
+        xp_increase_count = 3
+        for event_log in event_stream:
+            if event_log[1] == "XP_INCREASED":
+                xp_increase_count -= 1
+            if xp_increase_count <= 0:
+                fsm_input = "high_xp_events"
+
+        self.tick_fsm(fsm_input)
+
 
     # checks for a level up / level down -- if its possible then level up / down
     # otherwise, returns False
@@ -122,7 +179,7 @@ class Tomo():
             # triggers level increased event
             events.tomo_topic.get_event("LVL_INCREASED").trigger(self)
 
-            print(f"{self.name}'s BOND LVL changed to {self.bond_level}")
+            print(f"TOMO SYSTEM: {self.name}'s BOND LVL changed to {self.bond_level}")
         else:
             return False
 
@@ -137,12 +194,12 @@ class Tomo():
             if type(hp) != int:
                 raise TypeError("Invalid HP increase value")
             self.hp += hp
-            print(f"{self.name}'s HP increased by {hp}!")
+            print(f"TOMO SYSTEM: {self.name}'s HP increased by {hp}!")
         if xp:
             if type(xp) != int:
                 raise TypeError("Invalid XP increase value")
             self.xp += xp
-            print(f"{self.name}'s XP increased by {xp}!")
+            print(f"TOMO SYSTEM: {self.name}'s XP increased by {xp}!")
             events.tomo_topic.get_event("XP_INCREASED").trigger(self)
             self.check_for_level()
         self.updated = True

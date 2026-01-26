@@ -1,9 +1,10 @@
-from core import tomos
+from core import tomos, events
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QLabel)
 from PyQt6.QtGui import QPixmap, QColor, QImage
 
+# manages the entire Tomo viewbox, handling events and interactions with the backend before passing into each of its children for displaying
 class TomoViewManager(QWidget):
 
     @staticmethod
@@ -28,22 +29,38 @@ class TomoViewManager(QWidget):
         self.view_layout.addWidget(self.tab_widget)
 
         self.stat_view = TomoStatView(self)
-        self.tab_widget.addTab(self.stat_view, f"{self.get_current_tomo().name}'s Stats")
+        self.tab_widget.addTab(self.stat_view, f"{self.tomos.current_tomo.name}'s Stats")
+
+        # on completion of either the XP_INCREASED or LVL_INCREASED events in the tomo topic, the stat view is updated
+        for event in events.tomo_topic.get_events("XP_INCREASED", "LVL_INCREASED"):
+            event.register(self.stat_update_event)
 
         self.list_view = TomoListView(self)
         self.tab_widget.addTab(self.list_view, "Your Tomos")
 
-        # testing sprite anim stuff -- eventually this will be triggered by fsm/events
-        self.line_edit = QLineEdit()
-        self.view_layout.addWidget(self.line_edit)
-        # self.line_edit.returnPressed.connect(lambda : self.sprite_view.animator.update_sprite(self.line_edit.text()))
+        self.sprite_view.display_view()
+        self.stat_view.update_stats(self.tomos.current_tomo.get_base_stats(), self.tomos.current_tomo.hp, self.tomos.current_tomo.xp, self.tomos.current_tomo.bond_level)
 
-    def get_current_tomo(self):
-        return self.tomos.current_tomo
+        events.tomo_topic.get_event("STATE_CHANGED").register(self.tomo_state_change_event)
 
+    # updates the tomo stats on occurence of either of the stat_update_events
+    def stat_update_event(self, tomo : tomos.Tomo):
+        self.stat_view.update_stats(tomo.get_base_stats(), tomo.hp, tomo.xp, tomo.bond_level)
+
+    # behaviours that occur on the change of a state in the fsm
+    def tomo_state_change_event(self, tomo : tomos.Tomo):
+        state = tomo.fsm.current_state
+        print(f"TOMO UI: current tomo state: {state.name}")
+        # whenever the same state is executed again, it will activate its correct response icon
+        # remember that by default the state's name is passed as argument into callback
+        self.sprite_view.activate_response_icon(state.name  )
+        state.set_callback(self.sprite_view.activate_response_icon)
+
+    # what happens on quit of this window/widget
     def quit_proc(self):
         self.tomos.update_tomos()
 
+# displays sprites in the scene according to the TomoSpriteConstructor (self.painter)
 class TomoSpriteView(QGraphicsView):
 
     def __init__(self, manager : TomoViewManager):
@@ -59,8 +76,15 @@ class TomoSpriteView(QGraphicsView):
 
         rect = self.rect()
         self.painter = TomoSpriteConstructor(rect.x(), rect.y(), rect.width(), rect.height())
+
+    def display_view(self):
         self.setScene(self.painter)
 
+    def activate_response_icon(self, tomo_state : str):
+        print(f"TOMO UI: activating response icon for {tomo_state}")
+        self.painter.activate_response_icon(tomo_state)
+
+# constructs the scene by creating and adopting TomoSprite objects -- choosing what is displayed and where
 class TomoSpriteConstructor(QGraphicsScene):
 
     def __init__(self, rect_x : int, rect_y : int, rect_w : int, rect_h : int):
@@ -72,8 +96,12 @@ class TomoSpriteConstructor(QGraphicsScene):
         self.response_icons = {"idle" : TomoSprite("green", response_icon_size), "playful" : TomoSprite("red", response_icon_size), "tired" : TomoSprite("blue", response_icon_size)}
         for sprite in self.response_icons.values():
             self.addItem(sprite)
-            print(sprite.colour)
-            sprite.setPos(150, 150)
+
+    # activates one specific response icon depending on the tomo state passed into method
+    def activate_response_icon(self, tomo_state : str):
+        for icon_name in self.response_icons:
+            visible = icon_name == tomo_state
+            self.response_icons[icon_name].setVisible(visible)
 
     def set_tomo_sprite(self, tomo : tomos.Tomo):
 
@@ -83,6 +111,7 @@ class TomoSpriteConstructor(QGraphicsScene):
 
         return
 
+# an object that is a member of the TomoSpriteConstructor's scene -- can be drawn to the TomoSpriteView
 class TomoSprite(QGraphicsPixmapItem):
 
     def __init__(self, file_path : str, size : tuple[int, int] = None):
@@ -102,7 +131,9 @@ class TomoSprite(QGraphicsPixmapItem):
             self.file_path = file_path
 
         self.setPixmap(sprite_pixmap)
+        self.setVisible(False)
 
+# overviews the stats of the currently selected Tomo
 class TomoStatView(QWidget):
 
     def __init__(self, manager : TomoViewManager):
@@ -110,33 +141,50 @@ class TomoStatView(QWidget):
 
         self.manager = manager
 
-        self.stat_layout = QHBoxLayout()
+        self.stat_layout = QVBoxLayout()
         self.setLayout(self.stat_layout)
+        self.stat_layout.setSpacing(0)
+        self.setContentsMargins(11, 0, 11, 0)
+
+        self.bond_level = QProgressBar()
+        self.bond_level.setFormat("BOND LVL: %v")
+        self.bond_level.setMinimum(1)
+        # you can think about centering this later in css -- windows 11 styling doesnt support centering or thick bars
+        # self.bond_level.setStyleSheet('text-align: center')
+        # or
+        # self.bond_level.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.stat_layout.addWidget(self.bond_level)
+
+        self.bottom_stats = QWidget()
+        self.bottom_stats_layout = QHBoxLayout()
+        self.bottom_stats.setLayout(self.bottom_stats_layout)
 
         self.hp_bar = QProgressBar()
         self.hp_bar.setFormat("HP: %v/%m")
         self.hp_bar.setMinimum(0)
-        self.stat_layout.addWidget(self.hp_bar)
+        self.bottom_stats_layout.addWidget(self.hp_bar)
 
         self.xp_bar = QProgressBar()
         self.xp_bar.setFormat("XP: %v/%m")
         self.xp_bar.setMinimum(0)
-        self.stat_layout.addWidget(self.xp_bar)
+        self.bottom_stats_layout.addWidget(self.xp_bar)
 
-        self.update_stats()
+        self.stat_layout.addWidget(self.bottom_stats)
 
-    def update_stats(self):
-        current_tomo = self.manager.get_current_tomo()
-        if not current_tomo:
-            return False
-        base_stats = current_tomo.get_base_stats()
+    # updates the each tomo stat in the view
+    def update_stats(self, base_stats : dict, hp : int, xp : int, bond_lvl : int):
+
+        self.bond_level.setMaximum(len(base_stats) + 1)
+        self.bond_level.setValue(bond_lvl)
 
         self.hp_bar.setMaximum(base_stats["hp"])
-        self.hp_bar.setValue(current_tomo.hp)
+        self.hp_bar.setValue(hp)
 
         self.xp_bar.setMaximum(base_stats["required_xp"])
-        self.xp_bar.setValue(current_tomo.xp)
+        self.xp_bar.setValue(xp)
 
+# overviews all of the non-selected Tomos that the user owns
 class TomoListView(QWidget):
 
     def __init__(self, manager : TomoViewManager):

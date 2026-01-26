@@ -103,7 +103,7 @@ class _PomodoroTimer():
         self.rest_timer = None
         self.rest_timer : BaseTimer
         self.timers = {}
-        self.timers : dict[bool : BaseTimer]
+        self.timers : dict[bool, BaseTimer]
 
         self.set_difficulty(difficulty)
 
@@ -115,7 +115,7 @@ class _PomodoroTimer():
         self.modify_bin = []
 
         # registers callback to timer completion
-        events.pomo_topic.get_event("TIMER_COMPLETED").register(lambda timer : self.switch_focus())
+        events.pomo_topic.get_event("TIMER_COMPLETED").register(self.switch_focus)
 
 
     # on a timer completion event, the focus mode of the pomodoro timer is switched and the current timer changes
