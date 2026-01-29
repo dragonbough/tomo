@@ -35,11 +35,7 @@ class StateMachine():
         if file_path:
             self.load_from_xml(file_path)
 
-        # self.states = {state_name : State}
-        self.states : dict[str, State] = {}
-        self.current_state : State = None
-        self.start_state : State = None
-        self.stop_state : State = None
+        self.reset_fsm()
 
     # returns all of the states in state machine
     def get_states(self):
@@ -99,12 +95,54 @@ class StateMachine():
         if input:
             self.transition(input)
 
+    # resets the finite state machine to be empty
+    def reset_fsm(self):
+
+        # self.states = {state_name : State}
+        self.states : dict[str, State] = {}
+        self.current_state : State = None
+        self.start_state : State = None
+        self.stop_state : State = None
+
     # loads state machine configuration from xml file using eltree
-    def load_from_xml(self, file_path : str):
+    def load_from_xml(self, str_file_path : str):
 
-        print(f"Loading {file_path} from XML to create state machine...")
+        self.reset_fsm()
 
-        pass
+        file_path = Path(str_file_path)
+
+        print(f"Loading {file_path} from XML to create state machine...\n")
+
+        if not file_path.exists():
+            raise Exception(f"Invalid path for loading FSM: {file_path}")
+
+        file = eltree.parse(str_file_path)
+        # eltree.indent(file)
+
+        graph_xml = file.getroot()
+        # print(eltree.tostring(graph_xml, encoding="unicode"))
+
+        # defining the namespace so that tags can be found -- that weird prefixed thing
+        namespaces = {"ns0" : "http://graphml.graphdrawing.org/xmlns"}
+
+        graph = graph_xml.find("ns0:graph", namespaces)
+
+        # creates all of the states in the graph using the "node" tag in the file
+        for node in graph.findall("ns0:node", namespaces):
+            node_name = node.get("id")
+            state = State(node_name)
+            self.add_state(state)
+
+        # creates all of the transitions between states in the graph using the "edge" tag in the file
+        for edge in graph.findall("ns0:edge", namespaces):
+            source_node = edge.get("source")
+            target_node = edge.get("target")
+            transition = edge.find("ns0:data", namespaces).text
+
+            source_state = self.get_state(source_node)
+            connecting_state = self.get_state(target_node)
+
+            self.add_transition(source_state, transition, connecting_state)
 
 
 class BaseTomo():
@@ -455,6 +493,10 @@ if __name__ == "__main__":
         base_dir = Path(__file__).resolve().parent
         folder_path = base_dir / "fsm_saves"
 
+        # creates folder if it doesn't already exist
+        if not folder_path.exists():
+            folder_path.mkdir()
+
         def create_fsm_graph(fsm : StateMachine):
 
             #directional graph allowing parellel edges created using networkx
@@ -513,7 +555,7 @@ if __name__ == "__main__":
 
         # creates dict of files within the fsm_saves folder
         files = {index + 1 : str(file.relative_to(folder_path)) for index, file in enumerate(folder_path.iterdir())}
-        # if there are any files then ask to load one and give the user options to select
+        # if there are any files then give user files to load and pass the selected one into StateMachine.load_from_xml() method
         if files:
             load_graph_choice = input("Load Graph? [Y/N]: ").lower()
             if load_graph_choice == "y":
@@ -522,7 +564,7 @@ if __name__ == "__main__":
                 choice = -1
                 while not(1 <= choice <= len(files)):
                     choice = int(input("Select a file: "))
-                tomo.fsm.load_from_xml(files[choice])
+                tomo.fsm.load_from_xml(str(folder_path / files[choice]))
 
         while running == True:
 
