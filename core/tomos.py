@@ -1,4 +1,6 @@
 from . import data, events
+import xml.etree.ElementTree as eltree
+from pathlib import Path
 
 #class defining a state in a state machine
 class State():
@@ -9,7 +11,7 @@ class State():
         if callback:
             self.set_callback(callback)
         # self.transitions = {transition : state}
-        self.transitions = {}
+        self.transitions : dict[str, State] = {}
 
     #executes the behaviour's function
     def execute(self, *args):
@@ -28,7 +30,11 @@ class State():
 class StateMachine():
 
     #defines the collection of states, the current state in the simulation of the FSM, the start state and the stop state
-    def __init__(self):
+    def __init__(self, file_path : str = None):
+
+        if file_path:
+            self.load_from_xml(file_path)
+
         # self.states = {state_name : State}
         self.states : dict[str, State] = {}
         self.current_state : State = None
@@ -92,6 +98,13 @@ class StateMachine():
         self.current_state.execute(self.current_state.name)
         if input:
             self.transition(input)
+
+    # loads state machine configuration from xml file using eltree
+    def load_from_xml(self, file_path : str):
+
+        print(f"Loading {file_path} from XML to create state machine...")
+
+        pass
 
 
 class BaseTomo():
@@ -334,7 +347,7 @@ class UserTomos():
         return list(self.tomos.values())
 
     # returns a specific tomo based on its id
-    def get_tomo(self, base_tomo_id : int):
+    def get_tomo(self, base_tomo_id : int) -> Tomo:
         return self.tomos[base_tomo_id]
 
     # selects a tomo in the users tomos as the "current"/"main" one
@@ -430,48 +443,60 @@ if __name__ == "__main__":
     ### TOMO FSM TESTING ###
     elif len(sys.argv) > 1 and sys.argv[1] == "fsm":
 
-        import networkx as nx
+        from networkx.classes import multidigraph
+        from networkx.drawing import draw_networkx, draw_networkx_edge_labels
+        from networkx.drawing.layout import arf_layout
+        from networkx.readwrite import write_graphml_lxml, read_graphml
+        from networkx import get_edge_attributes
+        from pathlib import Path
         import matplotlib.pyplot as plt
         import time
 
-        def display_states(fsm : StateMachine):
+        base_dir = Path(__file__).resolve().parent
+        folder_path = base_dir / "fsm_saves"
 
-            # converting the state machine object into an adjacency list for displaying as a network
-            adjacency_list = {}
+        def create_fsm_graph(fsm : StateMachine):
+
+            #directional graph allowing parellel edges created using networkx
+            graph = multidigraph.MultiDiGraph()
+
             for state_name in fsm.states:
-                adjacency_list[state_name] = [state.name for state in fsm.get_state(state_name).transitions.values()]
+                state = fsm.states[state_name]
+                if state.transitions:
+                    for transition in state.transitions:
+                        connecting_state = state.transitions[transition]
+                        graph.add_edge(u_for_edge=state.name, v_for_edge=connecting_state.name, name=transition)
+                else:
+                    graph.add_node(state_name)
 
-            # print(f"Adjacency List: {adjacency_list}")
+            return graph
 
-            edge_labels = {}
 
-            # converting the transitions for each state into format for displaying edge labels in network
-            for state_name in fsm.states:
-                for transition in fsm.get_state(state_name).transitions:
-                    final_state_name = fsm.get_state(state_name).transitions[transition].name
-                    edge_labels[(state_name, final_state_name)] = transition
+        def display_states(fsm_graph : multidigraph.MultiDiGraph, prev_pos : dict):
 
-            # print(f"Edge Labels: {edge_labels}")
-
-            #directional graph allowing parellel edges created using networkx and the adjacency list made
-            fsm_graph = nx.MultiDiGraph(adjacency_list)
-
-            # current state is green while everything else is red
-            colours = ["limegreen" if fsm.current_state and state_name == fsm.current_state.name else "red" for state_name in fsm_graph]
             plt.clf()
 
             node_size = 1500
 
             # defines the layout of the network
-            pos = nx.arf_layout(fsm_graph)
+            pos = arf_layout(fsm_graph, prev_pos)
 
             # draws the network via matplotlib
-            nx.draw_networkx(fsm_graph, node_size=node_size, node_color=colours, pos=pos, connectionstyle="arc3,rad=0.1")
+            draw_networkx(fsm_graph, node_size=node_size, pos=pos, connectionstyle="arc3,rad=0.1")
 
+            edge_labels = get_edge_attributes(fsm_graph, "name")
             if edge_labels:
-                nx.draw_networkx_edge_labels(G=fsm_graph, pos=pos, edge_labels=edge_labels, label_pos=0.3, connectionstyle="arc3,rad=0.1")
+                draw_networkx_edge_labels(G=fsm_graph, pos=pos, edge_labels=edge_labels, label_pos=0.3, connectionstyle="arc3,rad=0.1")
 
-            plt.show(block=False)
+            return pos
+
+        # saves graph to a filepath specified by user as an XML file -- useful for saving finite state machines created for testing
+        def save_graph(graph : multidigraph.MultiDiGraph, file_name : str):
+
+            file_path = folder_path / (file_name + ".fsm")
+
+            write_graphml_lxml(G=graph, path=str(file_path))
+
 
         running = True
 
@@ -481,12 +506,30 @@ if __name__ == "__main__":
         update = True
         selected_state = None
 
+        # updates automatically
+        plt.ion()
+        # maintains the positions of each node in graph
+        pos = None
+
+        # creates dict of files within the fsm_saves folder
+        files = {index + 1 : str(file.relative_to(folder_path)) for index, file in enumerate(folder_path.iterdir())}
+        # if there are any files then ask to load one and give the user options to select
+        if files:
+            load_graph_choice = input("Load Graph? [Y/N]: ").lower()
+            if load_graph_choice == "y":
+                for index in files:
+                    print(f"[{index}] {files[index]}")
+                choice = -1
+                while not(1 <= choice <= len(files)):
+                    choice = int(input("Select a file: "))
+                tomo.fsm.load_from_xml(files[choice])
+
         while running == True:
 
             clear_terminal()
             #if graph updated then things should update
             if update:
-                display_states(fsm=tomo.fsm)
+                pos = display_states(create_fsm_graph(tomo.fsm), pos)
                 update = False
 
             user_input = ""
@@ -514,22 +557,13 @@ if __name__ == "__main__":
                     # callback in lambda form MUST be written like this -- writing lambda : print(action) does not store action locally
                     # rather, it just points to the action variable which changes on every loop
                     callback = lambda x=action : print(x)
-                    state = State(name=state_name, callback=callback)
-                    tomo.fsm.add_state(state=state)
+                    state = State(state_name, callback)
+                    tomo.fsm.add_state(state)
 
                     update = True
 
                 # simulating a tick
                 elif (user_input == 2 or selected_user_input == 2) and tomo.fsm.states:
-
-                    # if there isnt a current state in the FSM, start from the start state of the FSM
-                    if not tomo.fsm.current_state:
-                        tomo.fsm.current_state = tomo.fsm.start_state
-
-                    if selected_user_input:
-                        start_from_selected = input(f"Start from selected state ({selected_state.name})? [Y/N]: ").lower()
-                        if start_from_selected == "y":
-                            tomo.fsm.current_state = selected_state
 
                     add_input = input("Input? [Y/N]: ").lower()
                     if add_input == "y":
@@ -545,6 +579,10 @@ if __name__ == "__main__":
                     update = True
 
                 elif user_input == 3 or selected_user_input == 4:
+                    save_choice = input("Save? [Y/N]: ").lower()
+                    if save_choice == "y":
+                        file_name = input("What would you like to call the file?: ").lower()
+                        save_graph(create_fsm_graph(tomo.fsm), file_name)
                     running = False
 
                 # transitioning to another state
