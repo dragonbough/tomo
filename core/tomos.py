@@ -2,6 +2,9 @@ from . import data, events
 import xml.etree.ElementTree as eltree
 from pathlib import Path
 
+base_dir = Path(__file__).resolve().parent
+folder_path = base_dir / "fsm_saves"
+
 #class defining a state in a state machine
 class State():
 
@@ -66,14 +69,23 @@ class StateMachine():
         else:
             raise ValueError("State not a member of state machine")
 
-    #deletes states from state machine
-    def delete_state(self, *states : State):
-        to_delete = []
+    #deletes states from state machine and all transitions to that state
+    def delete_state(self, *states_to_delete : State):
+
+        state_bin : list[str] = []
+
         for state_name in self.states:
-            if self.get_state(state_name) in states:
-                to_delete.append(state_name)
-        for state_name in to_delete:
-            self.states.pop(state_name)
+            state = self.states[state_name]
+            if state in states_to_delete:
+                state_bin.append(state_name)
+            else:
+                for transition in state.transitions:
+                    if state.transitions[transition] in states_to_delete:
+                        state.transitions.pop(transition)
+                        # we can break here because there wont be multiple transitions to the same state
+                        break
+        while state_bin:
+            self.states.pop(state_bin.pop())
 
     #transitions between the current state and the next state depending on given input
     def transition(self, input : str):
@@ -111,10 +123,10 @@ class StateMachine():
 
         file_path = Path(str_file_path)
 
-        print(f"Loading {file_path} from XML to create state machine...\n")
+        print(f"TOMO SYSTEM: FSM -- Loading {file_path} from XML to create state machine...\n")
 
         if not file_path.exists():
-            raise Exception(f"Invalid path for loading FSM: {file_path}")
+            raise NotADirectoryError(f"Invalid path for loading FSM: {file_path}")
 
         file = eltree.parse(str_file_path)
         # eltree.indent(file)
@@ -179,16 +191,17 @@ class Tomo():
         self.updated = False
 
         self.fsm = StateMachine()
+        # path that will be passed in: folder_path / "main.py"
 
         # ties every event in the tomo topic as a parameter into the update_fsm_event
         for event in events.tomo_topic.get_events():
             if event.name != "STATE_CHANGED":
                 event.register(self.check_for_fsm_input)
 
-        # precreating the tomo fsm -- eventually i will just be able to pass in some formatted file (maybe DOT) and then it will just save the states + transitions
-        self.fsm.add_state(State("idle"))
-        self.fsm.add_state(State("playful"))
-        self.fsm.add_transition(self.fsm.get_state("idle"), "high_xp_events", self.fsm.get_state("playful"))
+        # precreated tomo fsm
+        # self.fsm.add_state(State("idle"))
+        # self.fsm.add_state(State("playful"))
+        # self.fsm.add_transition(self.fsm.get_state("idle"), "high_xp_events", self.fsm.get_state("playful"))
 
     # checks for transition, and if so, triggered STATE_CHANGED event -- also handles incorrect inputs without crashing program
     def tick_fsm(self, input : str = None):
@@ -490,9 +503,6 @@ if __name__ == "__main__":
         import matplotlib.pyplot as plt
         import time
 
-        base_dir = Path(__file__).resolve().parent
-        folder_path = base_dir / "fsm_saves"
-
         # creates folder if it doesn't already exist
         if not folder_path.exists():
             folder_path.mkdir()
@@ -582,9 +592,9 @@ if __name__ == "__main__":
             print(f"Current State (Tick Sim): {tomo.fsm.current_state.name if tomo.fsm.current_state else None}")
 
             if not selected_state:
-                user_input = input("[1] Add State  [2] Simulate Tick  [3] Exit\n").lower()
+                user_input = input("[1] Add State  [2] Simulate FSM Tick  [3] Exit\n").lower()
             else:
-                selected_user_input = input("[1] Transition to State  [2] Simulate Tick  [3] Deselect  [4] Exit\n").lower()
+                selected_user_input = input("[1] Add Transition  [2] Delete State  [3] Simulate FSM Tick  [4] Deselect  [5] Exit\n").lower()
 
             if user_input.isdecimal() or selected_user_input.isdecimal():
                 if user_input:
@@ -605,7 +615,7 @@ if __name__ == "__main__":
                     update = True
 
                 # simulating a tick
-                elif (user_input == 2 or selected_user_input == 2) and tomo.fsm.states:
+                elif (user_input == 2 or selected_user_input == 3) and tomo.fsm.states:
 
                     add_input = input("Input? [Y/N]: ").lower()
                     if add_input == "y":
@@ -620,7 +630,7 @@ if __name__ == "__main__":
                     fsm_input = None
                     update = True
 
-                elif user_input == 3 or selected_user_input == 4:
+                elif user_input == 3 or selected_user_input == 5:
                     save_choice = input("Save? [Y/N]: ").lower()
                     if save_choice == "y":
                         file_name = input("What would you like to call the file?: ").lower()
@@ -645,8 +655,15 @@ if __name__ == "__main__":
                         tomo.fsm.add_transition(selected_state, transition_name, connecting_state)
                         update = True
 
+                # deletes the currently selected state
+                elif selected_user_input == 2:
+                    pos.pop(selected_state.name)
+                    tomo.fsm.delete_state(selected_state)
+                    selected_state = None
+                    update = True
+
                 # deselects the currently selected state
-                elif selected_user_input == 3:
+                elif selected_user_input == 4:
                     selected_state = None
 
 
