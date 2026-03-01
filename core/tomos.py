@@ -494,11 +494,10 @@ if __name__ == "__main__":
     ### TOMO FSM TESTING ###
     elif len(sys.argv) > 1 and sys.argv[1] == "fsm":
 
-        from networkx.classes import multidigraph
-        from networkx.drawing import draw_networkx, draw_networkx_edge_labels
+        from networkx.classes import digraph
         from networkx.drawing.layout import arf_layout
-        from networkx.readwrite import write_graphml_lxml, read_graphml
-        from networkx import get_edge_attributes
+        from networkx.readwrite import write_graphml_lxml
+        from networkx.drawing import draw_networkx, draw_networkx_edge_labels
         from pathlib import Path
         import matplotlib.pyplot as plt
         import time
@@ -510,40 +509,47 @@ if __name__ == "__main__":
         def create_fsm_graph(fsm : StateMachine):
 
             #directional graph allowing parellel edges created using networkx
-            graph = multidigraph.MultiDiGraph()
+            graph = digraph.DiGraph()
 
             for state_name in fsm.states:
                 state = fsm.states[state_name]
                 if state.transitions:
                     for transition in state.transitions:
                         connecting_state = state.transitions[transition]
-                        graph.add_edge(u_for_edge=state.name, v_for_edge=connecting_state.name, name=transition)
+                        graph.add_edge(u_of_edge=state.name, v_of_edge=connecting_state.name, name=transition)
                 else:
                     graph.add_node(state_name)
 
             return graph
 
-
-        def display_states(fsm_graph : multidigraph.MultiDiGraph, prev_pos : dict):
+        # displays FSM in matplotlib graph
+        def display_states(fsm_graph : digraph.DiGraph, prev_pos : dict):
 
             plt.clf()
 
-            node_size = 1500
-
             # defines the layout of the network
-            pos = arf_layout(fsm_graph, prev_pos)
+            pos = arf_layout(G=fsm_graph, pos=prev_pos, max_iter=5000, a=1.8)
 
-            # draws the network via matplotlib
-            draw_networkx(fsm_graph, node_size=node_size, pos=pos, connectionstyle="arc3,rad=0.1")
+            edge_labels = {}
 
-            edge_labels = get_edge_attributes(fsm_graph, "name")
-            if edge_labels:
-                draw_networkx_edge_labels(G=fsm_graph, pos=pos, edge_labels=edge_labels, label_pos=0.3, connectionstyle="arc3,rad=0.1")
+            for source, dest, data in fsm_graph.edges(data=True):
+                edge_labels[source, dest] = data["name"]
+
+            if not pos:
+                return prev_pos
+
+            node_size = 600
+            node_font_size = 11
+            edge_font_size = 9
+            connection_style = "arc3, rad=0.1"
+
+            draw_networkx(G=fsm_graph, pos=pos, arrows=True, arrowsize=11, node_size=node_size, font_size=node_font_size, connectionstyle=connection_style)
+            draw_networkx_edge_labels(G=fsm_graph, pos=pos, edge_labels=edge_labels, node_size=node_size, font_size=edge_font_size, connectionstyle=connection_style)
 
             return pos
 
         # saves graph to a filepath specified by user as an XML file -- useful for saving finite state machines created for testing
-        def save_graph(graph : multidigraph.MultiDiGraph, file_name : str):
+        def save_graph(graph : digraph.DiGraph, file_name : str):
 
             file_path = folder_path / (file_name + ".fsm")
 
@@ -560,7 +566,7 @@ if __name__ == "__main__":
 
         # updates automatically
         plt.ion()
-        # maintains the positions of each node in graph
+        # maintains position of nodes in graph
         pos = None
 
         # creates dict of files within the fsm_saves folder
