@@ -1,7 +1,7 @@
 from core import tomos, events
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QLabel)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QLabel, QToolTip)
 from PyQt6.QtGui import QPixmap, QColor, QImage
 
 # manages the entire Tomo viewbox, handling events and interactions with the backend before passing into each of its children for displaying
@@ -24,6 +24,8 @@ class TomoViewManager(QWidget):
         self.sprite_view = TomoSpriteView(self)
         self.view_layout.addWidget(self.sprite_view)
         self.view_layout.setAlignment(self.sprite_view, Qt.AlignmentFlag.AlignCenter)
+
+        self.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
 
         self.tab_widget = QTabWidget()
         self.view_layout.addWidget(self.tab_widget)
@@ -92,10 +94,14 @@ class TomoSpriteConstructor(QGraphicsScene):
 
         self.setSceneRect(rect_x, rect_y, rect_w, rect_h)
 
-        response_icon_size = (20, 20)
-        self.response_icons = {"idle" : TomoSprite("green", response_icon_size), "playful" : TomoSprite("red", response_icon_size), "tired" : TomoSprite("blue", response_icon_size)}
-        for sprite in self.response_icons.values():
-            self.addItem(sprite)
+        response_icon_size = (30, 30)
+        response_icon_pos = 200 - response_icon_size[0], 0
+
+        self.response_icons = {"idle" : ResponseIcon("idle", "grey", response_icon_size), "happy": ResponseIcon("happy", "green", response_icon_size), "playful" : ResponseIcon("playful", "pink", response_icon_size),
+                               "proud" : ResponseIcon("proud", "yellow", response_icon_size), "relieved" : ResponseIcon("relieved", "orange", response_icon_size), "tired" : ResponseIcon("tired", "blue", response_icon_size)}
+        for icon in self.response_icons.values():
+            icon.setPos(*response_icon_pos)
+            self.addItem(icon)
 
     # activates one specific response icon depending on the tomo state passed into method
     def activate_response_icon(self, tomo_state : str):
@@ -132,6 +138,42 @@ class TomoSprite(QGraphicsPixmapItem):
 
         self.setPixmap(sprite_pixmap)
         self.setVisible(False)
+
+# icons representing the current state of the user's Tomo
+class ResponseIcon(TomoSprite):
+
+    def __init__(self, icon_name : str, file_path : str, size : tuple[int, int] = None, description : str = None):
+        super().__init__(file_path, size)
+
+        self.description = description
+        if not self.description:
+            self.description = f"Your Tomo is <b>{icon_name}</b>."
+
+        self.tool_tip = QLabel()
+        self.tool_tip.setWindowFlag(Qt.WindowType.ToolTip, True)
+
+        self.setAcceptHoverEvents(True)
+
+    # shows the tooltip as soon as mouse enters responseicon
+    def hoverMoveEvent(self, event):
+
+        pos = event.screenPos()
+        # prevents clipping of mouse and the tooltip itself
+        pos.setY(pos.y() + 20)
+        self.tool_tip.move(pos)
+        self.tool_tip.setText(self.description)
+
+        if self.tool_tip.isHidden():
+            self.tool_tip.show()
+
+        return super().hoverMoveEvent(event)
+
+    # hide tooltip as soon as mouse leaves
+    def hoverLeaveEvent(self, event):
+
+        self.tool_tip.hide()
+
+        return super().hoverLeaveEvent(event)
 
 # overviews the stats of the currently selected Tomo
 class TomoStatView(QWidget):

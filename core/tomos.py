@@ -36,9 +36,9 @@ class StateMachine():
     def __init__(self, file_path : str = None):
 
         if file_path:
-            self.load_from_xml(file_path)
-
-        self.reset_fsm()
+            self.load_from_xml(f"{file_path}.fsm")
+        else:
+            self.reset_fsm()
 
     # returns all of the states in state machine
     def get_states(self):
@@ -86,6 +86,10 @@ class StateMachine():
                         break
         while state_bin:
             self.states.pop(state_bin.pop())
+
+    # deletes transition between two states
+    def delete_transition(self, initial_state : State, transition : str):
+        initial_state.transitions.pop(transition)
 
     #transitions between the current state and the next state depending on given input
     def transition(self, input : str):
@@ -156,6 +160,8 @@ class StateMachine():
 
             self.add_transition(source_state, transition, connecting_state)
 
+        print([state_name for state_name in self.states])
+
 
 class BaseTomo():
 
@@ -190,7 +196,7 @@ class Tomo():
         self.bond_level = level
         self.updated = False
 
-        self.fsm = StateMachine()
+        self.fsm = StateMachine(str(folder_path / "main_fsm"))
         # path that will be passed in: folder_path / "main.py"
 
         # ties every event in the tomo topic as a parameter into the update_fsm_event
@@ -218,15 +224,36 @@ class Tomo():
     def check_for_fsm_input(self):
 
         fsm_input = None
+        event_stream = events.tomo_topic.get_stream()
+        latest_event_timestamp, latest_event_name = event_stream[0]
+
+        # these checks are in order of precedence (from least precedence to highest precedence)
+
+        # if the xp is increased then tick fsm with input xp_increased
+        if latest_event_name == "XP_INCREASED":
+            fsm_input = "xp_increased"
 
         # if the number of xp increased events in this session goes above a certain amount, then tick the fsm with the input high_xp_events
-        event_stream = events.tomo_topic.get_stream()
         xp_increase_count = 3
         for event_log in event_stream:
             if event_log[1] == "XP_INCREASED":
                 xp_increase_count -= 1
             if xp_increase_count <= 0:
                 fsm_input = "high_xp_events"
+
+        # if level is increased then tick fsm with input lvl_incresaed
+        if latest_event_name == "LVL_INCREASED":
+            fsm_input = "lvl_increased"
+
+        # if hp falls below a certain threshold then tick fsm with input hp_low
+        max_hp = self.get_base_stats()["hp"]
+        print(max_hp)
+        if (self.hp / max_hp) < 0.5:
+            fsm_input = "low_hp"
+
+        # if hp and xp are 0 then tick fsm with input fully_depleted
+        if self.hp <= 0 and self.xp <= 0:
+            fsm_input = "fully_depleted"
 
         self.tick_fsm(fsm_input)
 
@@ -600,7 +627,7 @@ if __name__ == "__main__":
             if not selected_state:
                 user_input = input("[1] Add State  [2] Simulate FSM Tick  [3] Exit\n").lower()
             else:
-                selected_user_input = input("[1] Add Transition  [2] Delete State  [3] Simulate FSM Tick  [4] Deselect  [5] Exit\n").lower()
+                selected_user_input = input("[1] Add Transition  [2] Delete State/Transition  [3] Simulate FSM Tick  [4] Deselect  [5] Exit\n").lower()
 
             if user_input.isdecimal() or selected_user_input.isdecimal():
                 if user_input:
@@ -661,11 +688,31 @@ if __name__ == "__main__":
                         tomo.fsm.add_transition(selected_state, transition_name, connecting_state)
                         update = True
 
-                # deletes the currently selected state
+                # deletes the currently selected state or a transition from the currently selected state
                 elif selected_user_input == 2:
-                    pos.pop(selected_state.name)
-                    tomo.fsm.delete_state(selected_state)
-                    selected_state = None
+
+                    choice = ""
+
+                    while not choice or not choice.isdecimal() or not(1 <= int(choice) <= 3):
+                        choice = input("[1] Delete State / [2] Delete Transition / [3] NVM\n")
+                    choice = int(choice)
+                    if choice == 1:
+                        pos.pop(selected_state.name)
+                        tomo.fsm.delete_state(selected_state)
+                        selected_state = None
+
+                    elif choice == 2:
+                        for i, transition_name in enumerate(selected_state.transitions):
+                            print(f"[{i+1}] {transition_name}")
+                        transition_index = ""
+                        while not transition_index or not transition_index.isdecimal() or not(1 <= int(transition_index) <= len(selected_state.transitions)):
+                            transition_index = input("Enter index: ")
+                        selected_transition = [transition for transition in selected_state.transitions][int(transition_index)-1]
+                        tomo.fsm.delete_transition(selected_state, selected_transition)
+
+                    elif choice == 3:
+                        continue
+
                     update = True
 
                 # deselects the currently selected state
