@@ -6,4 +6,3 @@
 *.db-shm
 *.db-wal
 /.vscode
-**/fsm_saves/**
