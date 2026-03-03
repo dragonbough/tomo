@@ -40,6 +40,8 @@ class StateMachine():
         else:
             self.reset_fsm()
 
+        self.current_state = self.start_state
+
     # returns all of the states in state machine
     def get_states(self):
         return self.states.values()
@@ -160,9 +162,6 @@ class StateMachine():
 
             self.add_transition(source_state, transition, connecting_state)
 
-        print([state_name for state_name in self.states])
-
-
 class BaseTomo():
 
     def __init__(self, tomo_id : int, base_name : str, levels : dict[int : dict[str, int]]):
@@ -196,18 +195,14 @@ class Tomo():
         self.bond_level = level
         self.updated = False
 
-        self.fsm = StateMachine(str(folder_path / "main_fsm"))
-        # path that will be passed in: folder_path / "main.py"
-
         # ties every event in the tomo topic as a parameter into the update_fsm_event
         for event in events.tomo_topic.get_events():
             if event.name != "STATE_CHANGED":
                 event.register(self.check_for_fsm_input)
 
-        # precreated tomo fsm
-        # self.fsm.add_state(State("idle"))
-        # self.fsm.add_state(State("playful"))
-        # self.fsm.add_transition(self.fsm.get_state("idle"), "high_xp_events", self.fsm.get_state("playful"))
+        # main_fsm -- default tomo fsm config
+        self.fsm = StateMachine(str(folder_path / "main_fsm"))
+        self.check_for_fsm_input()
 
     # checks for transition, and if so, triggered STATE_CHANGED event -- also handles incorrect inputs without crashing program
     def tick_fsm(self, input : str = None):
@@ -225,7 +220,7 @@ class Tomo():
 
         fsm_input = None
         event_stream = events.tomo_topic.get_stream()
-        latest_event_timestamp, latest_event_name = event_stream[0]
+        latest_event_timestamp, latest_event_name = event_stream[0] if event_stream else (None, None)
 
         # these checks are in order of precedence (from least precedence to highest precedence)
 
@@ -256,7 +251,6 @@ class Tomo():
             fsm_input = "fully_depleted"
 
         self.tick_fsm(fsm_input)
-
 
     # checks for a level up / level down -- if its possible then level up / down
     # otherwise, returns False
@@ -294,7 +288,6 @@ class Tomo():
             events.tomo_topic.get_event("XP_INCREASED").trigger(self)
             self.check_for_level()
         self.updated = True
-
 
     # sets xp/xp to a specific amount
     def set_stat(self, hp: int = None, xp : int = None):

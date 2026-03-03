@@ -44,6 +44,8 @@ class TomoViewManager(QWidget):
         self.stat_view.update_stats(self.tomos.current_tomo.get_base_stats(), self.tomos.current_tomo.hp, self.tomos.current_tomo.xp, self.tomos.current_tomo.bond_level)
 
         events.tomo_topic.get_event("STATE_CHANGED").register(self.tomo_state_change_event)
+        # ensures that the start state is represented as a response icon on startup
+        self.tomo_state_change_event(self.tomos.current_tomo)
 
     # updates the tomo stats on occurence of either of the stat_update_events
     def stat_update_event(self, tomo : tomos.Tomo):
@@ -55,7 +57,7 @@ class TomoViewManager(QWidget):
         print(f"TOMO UI: current tomo state: {state.name}")
         # whenever the same state is executed again, it will activate its correct response icon
         # remember that by default the state's name is passed as argument into callback
-        self.sprite_view.activate_response_icon(state.name  )
+        self.sprite_view.activate_response_icon(state.name)
         state.set_callback(self.sprite_view.activate_response_icon)
 
     # what happens on quit of this window/widget
