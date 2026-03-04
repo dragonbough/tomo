@@ -1,8 +1,11 @@
 from core import tomos, events
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QLabel, QToolTip)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QLabel)
 from PyQt6.QtGui import QPixmap, QColor, QImage
+
+# relative to /core. useful for retrieving sprites
+base_dir = tomos.base_dir
 
 # manages the entire Tomo viewbox, handling events and interactions with the backend before passing into each of its children for displaying
 class TomoViewManager(QWidget):
@@ -14,6 +17,10 @@ class TomoViewManager(QWidget):
 
     def __init__(self, tomos : tomos.UserTomos):
         super().__init__()
+
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        self.setWindowFlag(Qt.WindowType.CustomizeWindowHint, True)
+        self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
 
         self.tomos = tomos
         self.tomos.select_tomo(self.tomos.get_tomos()[0])
@@ -41,15 +48,20 @@ class TomoViewManager(QWidget):
         self.tab_widget.addTab(self.list_view, "Your Tomos")
 
         self.sprite_view.display_view()
-        self.stat_view.update_stats(self.tomos.current_tomo.get_base_stats(), self.tomos.current_tomo.hp, self.tomos.current_tomo.xp, self.tomos.current_tomo.bond_level)
+        self.stat_update_event(self.tomos.current_tomo)
 
         events.tomo_topic.get_event("STATE_CHANGED").register(self.tomo_state_change_event)
         # ensures that the start state is represented as a response icon on startup
         self.tomo_state_change_event(self.tomos.current_tomo)
 
+        self.fixed_size = self.sizeHint()
+        self.setFixedSize(self.fixed_size)
+        self.setMaximumSize(self.fixed_size)
+
     # updates the tomo stats on occurence of either of the stat_update_events
     def stat_update_event(self, tomo : tomos.Tomo):
         self.stat_view.update_stats(tomo.get_base_stats(), tomo.hp, tomo.xp, tomo.bond_level)
+        self.sprite_view.update_sprite(tomo.get_base_stats()["sprite_path"])
 
     # behaviours that occur on the change of a state in the fsm
     def tomo_state_change_event(self, tomo : tomos.Tomo):
@@ -88,6 +100,10 @@ class TomoSpriteView(QGraphicsView):
         print(f"TOMO UI: activating response icon for {tomo_state}")
         self.painter.activate_response_icon(tomo_state)
 
+    def update_sprite(self, sprite_path : str):
+        print(f"TOMO UI: updating sprite")
+        self.painter.set_tomo_sprite(sprite_path)
+
 # constructs the scene by creating and adopting TomoSprite objects -- choosing what is displayed and where
 class TomoSpriteConstructor(QGraphicsScene):
 
@@ -105,17 +121,37 @@ class TomoSpriteConstructor(QGraphicsScene):
             icon.setPos(*response_icon_pos)
             self.addItem(icon)
 
+        self.tomo_sprite = None
+
     # activates one specific response icon depending on the tomo state passed into method
     def activate_response_icon(self, tomo_state : str):
         for icon_name in self.response_icons:
             visible = icon_name == tomo_state
             self.response_icons[icon_name].setVisible(visible)
 
-    def set_tomo_sprite(self, tomo : tomos.Tomo):
+    # sets the tomo sprite to the screen
+    def set_tomo_sprite(self, sprite_path : str):
 
-        # this doesn't actually exist yet -- still need to implement backend sprite retrieval
-        # sprite = tomo.get_base_stats()["sprite"]
-        # TomoSprite(sprite)
+        if self.tomo_sprite:
+            self.removeItem(self.tomo_sprite)
+
+        tomo_sprite_size = 250, 250
+        sprite_pos = 100, 100
+
+        self.tomo_sprite = TomoSprite(sprite_path)
+
+        original_size = self.tomo_sprite.boundingRect().size().width(), self.tomo_sprite.boundingRect().size().height()
+
+        scale = tomo_sprite_size[0] / original_size[0]
+        self.tomo_sprite.setScale(scale)
+
+        scaled_size = self.tomo_sprite.boundingRect().size().width(), self.tomo_sprite.boundingRect().size().height()
+
+        self.tomo_sprite.setOffset(scaled_size[0] / -2, scaled_size[1] / -2)
+        self.tomo_sprite.setPos(*sprite_pos)
+
+        self.addItem(self.tomo_sprite)
+        self.tomo_sprite.setVisible(True)
 
         return
 
@@ -134,9 +170,12 @@ class TomoSprite(QGraphicsPixmapItem):
             sprite_pixmap.fill(QColor(file_path))
             self.colour = file_path
         else:
-            sprite_image = QImage(file_path)
+            actual_file_path = base_dir / file_path
+            if not actual_file_path.is_file():
+                raise FileExistsError(f"TOMO UI: Invalid file path for TomoSprite: {actual_file_path}")
+            sprite_image = QImage(str(actual_file_path))
             sprite_pixmap = QPixmap().fromImage(sprite_image)
-            self.file_path = file_path
+            self.file_path = actual_file_path
 
         self.setPixmap(sprite_pixmap)
         self.setVisible(False)

@@ -1,5 +1,4 @@
 from pathlib import Path
-
 import sqlite3
 
 #if db doesn't exist in directory already, constructs db using schema commands
@@ -32,9 +31,9 @@ if not db_path.is_file():
                          INSERT INTO TomoStats VALUES(1,'Pebble');""")
 
     # creates the TomoLevelingStats table and populates with data
-    cursor.executescript("""CREATE TABLE TomoLevelingStats(TomoID INTEGER NOT NULL, BondLevel INTEGER NOT NULL, RequiredXP INTEGER NOT NULL, Sprite BLOB, HP INTEGER NOT NULL, FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
-                         INSERT INTO TomoLevelingStats VALUES(1,2,300,NULL,150);
-                         INSERT INTO TomoLevelingStats VALUES(1,1,100,NULL,100);""")
+    cursor.executescript("""CREATE TABLE TomoLevelingStats(TomoID INTEGER NOT NULL, BondLevel INTEGER NOT NULL, RequiredXP INTEGER NOT NULL, SpritePath BLOB, HP INTEGER NOT NULL, FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
+                         INSERT INTO TomoLevelingStats VALUES(1,2,300,sprites/pebble2.png,150);
+                         INSERT INTO TomoLevelingStats VALUES(1,1,100,sprites/pebble.png,100);""")
 
     ## FOR BASE TOMOS ##
 
@@ -164,9 +163,9 @@ def retrieve_tomo_data(*tomo_ids : int) -> tuple[list[dict], dict]:
         bindings = generate_bindings(tomo_ids)
         cursor.execute(f"SELECT * FROM UserTomo WHERE TomoID in ({bindings})", tomo_ids)
         user_tomo_data = cursor.fetchall()
-        # retrieving the name, bondlevel, requiredxp, sprite, and hp from the tomostats and tomolevelingstats tables
+        # retrieving the name, bondlevel, requiredxp, SpritePath, and hp from the tomostats and tomolevelingstats tables
         # multiple leveling stats for each id -- leveling stats appended to
-        cursor.execute(f"""SELECT TomoStats.ID, TomoStats.BaseName, TomoLevelingStats.BondLevel, TomoLevelingStats.RequiredXP, TomoLevelingStats.Sprite, TomoLevelingStats.HP
+        cursor.execute(f"""SELECT TomoStats.ID, TomoStats.BaseName, TomoLevelingStats.BondLevel, TomoLevelingStats.RequiredXP, TomoLevelingStats.SpritePath, TomoLevelingStats.HP
                        FROM TomoLevelingStats
                        INNER JOIN TomoStats ON TomoLevelingStats.TomoID=TomoStats.ID
                        WHERE TomoStats.ID IN ({bindings})""", tomo_ids)
@@ -177,7 +176,7 @@ def retrieve_tomo_data(*tomo_ids : int) -> tuple[list[dict], dict]:
         cursor.execute("SELECT * FROM UserTomo")
         user_tomo_data = cursor.fetchall()
 
-        cursor.execute(f"""SELECT TomoStats.ID, TomoStats.BaseName, TomoLevelingStats.BondLevel, TomoLevelingStats.RequiredXP, TomoLevelingStats.Sprite, TomoLevelingStats.HP
+        cursor.execute(f"""SELECT TomoStats.ID, TomoStats.BaseName, TomoLevelingStats.BondLevel, TomoLevelingStats.RequiredXP, TomoLevelingStats.SpritePath, TomoLevelingStats.HP
                        FROM TomoLevelingStats
                        INNER JOIN TomoStats ON TomoLevelingStats.TomoID=TomoStats.ID""")
 
@@ -185,15 +184,17 @@ def retrieve_tomo_data(*tomo_ids : int) -> tuple[list[dict], dict]:
 
     organised_base_tomo_data = {}
 
-    #organises the base tomo data into a neat dictionary of the form: {tomo_id : {"basename" : basename, "levels" : { level : {"required_xp" : required_xp, "hp" : hp} }}}
+    #organises the base tomo data into a neat dictionary of the form: {tomo_id : {"basename" : basename, "levels" : { level : {"required_xp" : required_xp, "hp" : hp, "sprite_path" : sprite_path} }}}
     for base_tomo_datum in base_tomo_data:
         base_name = base_tomo_datum["basename"]
         base_id = int(base_tomo_datum["id"])
         level = int(base_tomo_datum["bondlevel"])
         required_xp = int(base_tomo_datum["requiredxp"])
         hp = int(base_tomo_datum["hp"])
+        sprite_path = base_tomo_datum["spritepath"]
 
-        level_data = {level : {"required_xp" : required_xp, "hp" : hp}}
+
+        level_data = {level : {"required_xp" : required_xp, "hp" : hp, "sprite_path" : sprite_path}}
 
         if base_id not in organised_base_tomo_data:
             organised_base_tomo_data[base_id] = {"basename" : base_name, "levels" : level_data}
