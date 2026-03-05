@@ -186,6 +186,8 @@ class TodoView(QTreeWidget):
     def __init__(self, todo_list : todos.TodoList):
         super().__init__()
 
+        self.setWindowTitle("tomo | todos")
+
         self.todo_list = todo_list
         self.items : list[TodoViewItem] = []
 

@@ -33,14 +33,18 @@ class State():
 class StateMachine():
 
     #defines the collection of states, the current state in the simulation of the FSM, the start state and the stop state
-    def __init__(self, file_path : str = None):
+    def __init__(self, file_path : str = None, start_state : str = None):
 
         if file_path:
             self.load_from_xml(f"{file_path}.fsm")
         else:
             self.reset_fsm()
 
+        if start_state:
+            self.start_state = self.states[start_state]
+
         self.current_state = self.start_state
+        print(f"TOMO SYSTEM: FSM -- Start State: {self.current_state.name}")
 
     # returns all of the states in state machine
     def get_states(self):
@@ -55,7 +59,6 @@ class StateMachine():
         self.states[state.name] = state
         if len(self.states) == 1:
             self.start_state = state
-            print(f"TOMO SYSTEM: FSM -- Start State: {state.name}")
 
     #adds transition between two states to FSM
     def add_transition(self, initial_state : State, transition_name : str, final_state : State):
@@ -187,7 +190,7 @@ class BaseTomo():
 #tomo is an agent that relies on a finite state machine for its behaviours
 class Tomo():
 
-    def __init__(self, name : str, hp : int, xp : int, level : int, base_tomo : BaseTomo):
+    def __init__(self, name : str, hp : int, xp : int, level : int, base_tomo : BaseTomo, last_behaviour : str = None):
         self.base_tomo = base_tomo
         self.name = name
         self.hp = hp
@@ -201,7 +204,7 @@ class Tomo():
                 event.register(self.check_for_fsm_input)
 
         # main_fsm -- default tomo fsm config
-        self.fsm = StateMachine(str(folder_path / "main_fsm"))
+        self.fsm = StateMachine(str(folder_path / "main_fsm"), start_state=last_behaviour)
         self.check_for_fsm_input()
 
     # checks for transition, and if so, triggered STATE_CHANGED event -- also handles incorrect inputs without crashing program
@@ -242,7 +245,6 @@ class Tomo():
 
         # if hp falls below a certain threshold then tick fsm with input hp_low
         max_hp = self.get_base_stats()["hp"]
-        print(max_hp)
         if (self.hp / max_hp) < 0.5:
             fsm_input = "low_hp"
 
@@ -335,7 +337,8 @@ class UserTomos():
             hp = int(tomo_datum["hp"])
             xp = int(tomo_datum["xp"])
             bond_level = int(tomo_datum["bondlevel"])
-            user_tomo = Tomo(name=name, hp=hp, xp=xp, level=bond_level, base_tomo=base_tomos[tomo_id])
+            last_behaviour = tomo_datum["lastbehaviour"]
+            user_tomo = Tomo(name=name, hp=hp, xp=xp, level=bond_level, base_tomo=base_tomos[tomo_id], last_behaviour=last_behaviour)
 
             # print("UserTomo retrieved!")
             # print(f"UserTomo Name: {user_tomo.name}:")
@@ -410,6 +413,7 @@ class UserTomos():
             tomo_datum["xp"] = tomo.xp
             tomo_datum["bondlevel"] = tomo.bond_level
             tomo_datum["id"] = tomo.base_tomo.tomo_id
+            tomo_datum["lastbehaviour"] = tomo.fsm.current_state.name
             unpacked_tomos.append(tomo_datum)
         return unpacked_tomos
 

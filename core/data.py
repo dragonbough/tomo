@@ -35,10 +35,8 @@ if not db_path.is_file():
                          INSERT INTO TomoLevelingStats VALUES(1,2,300,sprites/pebble2.png,150);
                          INSERT INTO TomoLevelingStats VALUES(1,1,100,sprites/pebble.png,100);""")
 
-    ## FOR BASE TOMOS ##
-
     # creates UserTomo table
-    cursor.execute("""CREATE TABLE UserTomo(TomoID INTEGER PRIMARY KEY, Name VARCHAR(45) NOT NULL, HP INTEGER NOT NULL, XP INTEGER NOT NULL, BondLevel INTEGER NOT NULL,
+    cursor.execute("""CREATE TABLE UserTomo(TomoID INTEGER PRIMARY KEY, Name VARCHAR(45) NOT NULL, HP INTEGER NOT NULL, XP INTEGER NOT NULL, BondLevel INTEGER NOT NULL, LastBehaviour VARCHAR,
                    FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));""")
 
 
@@ -208,7 +206,7 @@ def retrieve_tomo_data(*tomo_ids : int) -> tuple[list[dict], dict]:
 
 # modifies tomos with the provided base_ids
 def modify_tomo_data(*tomo_data : dict):
-    cursor.executemany("UPDATE UserTomo SET Name = (?), HP = (?), XP = (?), BondLevel = (?) WHERE TomoID = (?)", [(tomo_datum["name"], tomo_datum["hp"], tomo_datum["xp"], tomo_datum["bondlevel"], tomo_datum["id"]) for tomo_datum in tomo_data])
+    cursor.executemany("UPDATE UserTomo SET Name = (?), HP = (?), XP = (?), BondLevel = (?), LastBehaviour = (?) WHERE TomoID = (?)", [(tomo_datum["name"], tomo_datum["hp"], tomo_datum["xp"], tomo_datum["bondlevel"], tomo_datum["lastbehaviour"], tomo_datum["id"]) for tomo_datum in tomo_data])
     connection.commit()
 
 ## POMO DATA ##

@@ -1,22 +1,26 @@
 from ui import (tomos_ui, todo_ui)
 
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import Qt
 import sys
 
 # sys.argv allows arguments to be passed into the QApplication from the command line
 app = QApplication(sys.argv)
 
-todo_view = todo_ui.TodoView.get_user_todo_view()
-todo_view.show()
+views = set([todo_ui.TodoView.get_user_todo_view(), tomos_ui.TomoViewManager.get_tomos_view()])
 
-tomos_view = tomos_ui.TomoViewManager.get_tomos_view()
-tomos_view.show()
+for view in views:
+        view.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        view.setWindowFlag(Qt.WindowType.CustomizeWindowHint, True)
+        view.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
+for view in views:
+    view.show()
 
 # when the overall application is closed carry out the quit procedure for the todoview
 
 def quit_proc():
-    todo_view.quit_proc()
-    tomos_view.quit_proc()
+    for view in views:
+        view.quit_proc()
 
 app.lastWindowClosed.connect(quit_proc)
 

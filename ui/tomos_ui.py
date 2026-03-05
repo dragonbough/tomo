@@ -1,7 +1,7 @@
 from core import tomos, events
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QLabel)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QLabel, QScrollArea)
 from PyQt6.QtGui import QPixmap, QColor, QImage
 
 # relative to /core. useful for retrieving sprites
@@ -18,9 +18,7 @@ class TomoViewManager(QWidget):
     def __init__(self, tomos : tomos.UserTomos):
         super().__init__()
 
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowFlag(Qt.WindowType.CustomizeWindowHint, True)
-        self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
+        self.setWindowTitle("tomo | tomos")
 
         self.tomos = tomos
         self.tomos.select_tomo(self.tomos.get_tomos()[0])
@@ -277,3 +275,8 @@ class TomoListView(QWidget):
 
         self.view_layout = QHBoxLayout()
         self.setLayout(self.view_layout)
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidget(self)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
