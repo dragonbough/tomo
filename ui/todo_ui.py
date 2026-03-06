@@ -416,7 +416,7 @@ class TodoView(QTreeWidget):
     # resizes the item heights to content
     def resize_to_item_heights(self):
         min_height = self.visualItemRect(self.add_button_item).height() + self.header().height() + 5
-        max_height = 500
+        max_height = 350
         for item in self.items:
             if item.parent() and not item.parent().isExpanded():
                 continue

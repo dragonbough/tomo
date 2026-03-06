@@ -1,8 +1,8 @@
 from core import tomos, events
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QLabel, QScrollArea)
-from PyQt6.QtGui import QPixmap, QColor, QImage
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QLabel, QScrollArea, QPushButton, QSizePolicy)
+from PyQt6.QtGui import QPixmap, QColor, QImage, QIcon
 
 # relative to /core. useful for retrieving sprites
 base_dir = tomos.base_dir
@@ -36,13 +36,13 @@ class TomoViewManager(QWidget):
         self.view_layout.addWidget(self.tab_widget)
 
         self.stat_view = TomoStatView(self)
-        self.tab_widget.addTab(self.stat_view, f"{self.tomos.current_tomo.name}'s Stats")
+        self.tab_widget.addTab(self.stat_view, f"{self.tomos.current_tomo.name}")
 
         # on completion of either the XP_INCREASED or LVL_INCREASED events in the tomo topic, the stat view is updated
         for event in events.tomo_topic.get_events("XP_INCREASED", "LVL_INCREASED"):
             event.register(self.stat_update_event)
 
-        self.list_view = TomoListView(self)
+        self.list_view = TomoListView(self, self.tomos.get_tomos())
         self.tab_widget.addTab(self.list_view, "Your Tomos")
 
         self.sprite_view.display_view()
@@ -53,8 +53,17 @@ class TomoViewManager(QWidget):
         self.tomo_state_change_event(self.tomos.current_tomo)
 
         self.fixed_size = self.sizeHint()
-        self.setFixedSize(self.fixed_size)
-        self.setMaximumSize(self.fixed_size)
+        self.setFixedWidth(self.fixed_size.width())
+        self.setFixedHeight(350)
+
+    # switch out current tomo for another
+    def switch_tomo(self, tomo_id : int):
+        tomo = self.tomos.get_tomo(tomo_id)
+        self.tomos.select_tomo(tomo)
+        self.stat_update_event(self.tomos.current_tomo)
+        self.tomo_state_change_event(self.tomos.current_tomo)
+        self.tab_widget.setTabText(self.tab_widget.indexOf(self.stat_view), f"{self.tomos.current_tomo.name}")
+        self.tab_widget.setCurrentIndex(self.tab_widget.indexOf(self.stat_view))
 
     # updates the tomo stats on occurence of either of the stat_update_events
     def stat_update_event(self, tomo : tomos.Tomo):
@@ -268,15 +277,74 @@ class TomoStatView(QWidget):
 # overviews all of the non-selected Tomos that the user owns
 class TomoListView(QWidget):
 
-    def __init__(self, manager : TomoViewManager):
+    def __init__(self, manager : TomoViewManager, user_tomos : list[tomos.Tomo]):
         super().__init__()
 
         self.manager = manager
 
-        self.view_layout = QHBoxLayout()
-        self.setLayout(self.view_layout)
+        self.tomo_sprites : dict[str, "TomoListSprite"] = {}
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidget(self)
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.scroll_area.setMouseTracking(True)
+
+        for tomo in user_tomos:
+            sprite_path = tomo.get_base_stats()["sprite_path"]
+            sprite_label = TomoListSprite(tomo.name, sprite_path, tomo.get_tomo_id(), self)
+            self.tomo_sprites[tomo.name] = sprite_label
+
+        self.view_layout = QHBoxLayout()
+        self.setLayout(self.view_layout)
+
+        for tomo_name in self.tomo_sprites:
+            self.view_layout.addWidget(self.tomo_sprites[tomo_name], alignment=Qt.AlignmentFlag.AlignLeft)
+        self.show_user_tomos()
+
+    # switches out tomo for another
+    def switch_tomo(self, tomo_id : int):
+        self.manager.switch_tomo(tomo_id)
+        self.show_user_tomos()
+
+    # hides currently selected tomo, shows everything else
+    def show_user_tomos(self):
+        for tomo_name in self.tomo_sprites:
+            tomo_sprite = self.tomo_sprites[tomo_name]
+            if tomo_sprite.tomo_id == self.manager.tomos.current_tomo.get_tomo_id():
+                tomo_sprite.hide()
+            else:
+                tomo_sprite.show()
+
+class TomoListSprite(QPushButton):
+
+    def __init__(self, tomo_name : str, sprite_path : str, tomo_id : int, list_view : TomoListView):
+        super().__init__(parent=list_view)
+
+        self.list_view = list_view
+        self.tomo_id = tomo_id
+
+        self.sprite_pixmap = TomoSprite(sprite_path).pixmap()
+        self.setIcon(QIcon(self.sprite_pixmap))
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.setIconSize(self.sizeHint())
+
+        self.description = f"<b>{tomo_name}</b><br>This is your first Tomo!"
+        self.tool_tip = QLabel(self.description)
+        self.tool_tip.setWindowFlag(Qt.WindowType.ToolTip, True)
+        self.tool_tip.hide()
+        self.setMouseTracking(True)
+
+        self.clicked.connect(lambda : self.list_view.switch_tomo(self.tomo_id))
+
+    # maps tool tip to the mouse position and shows it
+    def mouseMoveEvent(self, ev):
+        mouse_pos = ev.globalPosition().toPoint()
+        self.tool_tip.move(mouse_pos.x(), mouse_pos.y() + 20)
+        self.tool_tip.show()
+        return super().mouseMoveEvent(ev)
+
+    # hides tool tip when mouse leaves
+    def leaveEvent(self, a0):
+        self.tool_tip.hide()
+        return super().leaveEvent(a0)

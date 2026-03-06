@@ -170,7 +170,7 @@ class BaseTomo():
     def __init__(self, tomo_id : int, base_name : str, levels : dict[int : dict[str, int]]):
         self.tomo_id = tomo_id
         self.base_name = base_name
-        # {level : {"hp" : 1, "required_xp" : 1, "sprite" : File}}
+        # {level : {"hp" : 1, "required_xp" : 1, "sprite_path" : File}}
         self.levels = levels
 
     # returns the highest level for the given xp
@@ -304,6 +304,10 @@ class Tomo():
         if name:
             self.name = name
         self.updated = True
+
+    # retrieves the tomo's base_id
+    def get_tomo_id(self):
+        return self.base_tomo.tomo_id
 
 # collection of Tomos
 class UserTomos():

@@ -7,12 +7,16 @@ import sys
 # sys.argv allows arguments to be passed into the QApplication from the command line
 app = QApplication(sys.argv)
 
-views = set([todo_ui.TodoView.get_user_todo_view(), tomos_ui.TomoViewManager.get_tomos_view()])
+todo_view = todo_ui.TodoView.get_user_todo_view()
+tomo_view = tomos_ui.TomoViewManager.get_tomos_view()
+
+views = [todo_view, tomo_view]
 
 for view in views:
         view.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         view.setWindowFlag(Qt.WindowType.CustomizeWindowHint, True)
         view.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
+
 for view in views:
     view.show()
 
