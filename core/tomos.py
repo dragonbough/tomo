@@ -177,6 +177,11 @@ class BaseTomo():
     def check_for_level(self, xp : int):
         # must be done in order to work -- sorting self.levels by key (level)
         tomo_levels = dict(sorted(self.levels.items(), key=lambda item: item[0]))
+
+        # returns max level of tomo when max passed as parameter
+        if type(xp) == str and xp == "max":
+            return max(self.levels)
+
         for level in tomo_levels:
             current_level = level
             if self.get_level_stats(level)["required_xp"] > xp:
@@ -186,6 +191,10 @@ class BaseTomo():
     # returns dictionary of stats for given level
     def get_level_stats(self, level : int) -> dict[str]:
         return self.levels[level]
+
+    # returns the max level of the tomo
+    def get_max_level(self):
+        return self.check_for_level("max")
 
 #tomo is an agent that relies on a finite state machine for its behaviours
 class Tomo():
@@ -258,6 +267,9 @@ class Tomo():
     # otherwise, returns False
     def check_for_level(self):
         new_level = self.base_tomo.check_for_level(self.xp)
+        # if the tomo has reached max level, its xp cannot surpass the xp at this level
+        if new_level == self.get_max_level():
+            self.xp = min(self.xp, self.get_max_stats()["required_xp"])
         if new_level != self.bond_level:
             self.bond_level = new_level
             new_stats = self.get_base_stats()
@@ -274,6 +286,14 @@ class Tomo():
     # if no level passed in, uses current tomo level
     def get_base_stats(self, level : int = None):
         return self.base_tomo.get_level_stats(self.bond_level if not level else level)
+
+    # wrapper function for getting base tomo's max level
+    def get_max_level(self):
+        return self.base_tomo.get_max_level()
+
+    # returns the max possible stats for the tomo
+    def get_max_stats(self):
+        return self.get_base_stats(self.get_max_level())
 
     # increases xp/hp by certain amount
     def increase_stat(self, hp : int = None, xp : int = None):

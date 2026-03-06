@@ -67,7 +67,7 @@ class TomoViewManager(QWidget):
 
     # updates the tomo stats on occurence of either of the stat_update_events
     def stat_update_event(self, tomo : tomos.Tomo):
-        self.stat_view.update_stats(tomo.get_base_stats(), tomo.hp, tomo.xp, tomo.bond_level)
+        self.stat_view.update_stats(tomo.get_base_stats(), tomo.hp, tomo.xp, tomo.bond_level, tomo.get_max_level())
         self.sprite_view.update_sprite(tomo.get_base_stats()["sprite_path"])
 
     # behaviours that occur on the change of a state in the fsm
@@ -263,9 +263,9 @@ class TomoStatView(QWidget):
         self.stat_layout.addWidget(self.bottom_stats)
 
     # updates the each tomo stat in the view
-    def update_stats(self, base_stats : dict, hp : int, xp : int, bond_lvl : int):
+    def update_stats(self, base_stats : dict, hp : int, xp : int, bond_lvl : int, max_bond_lvl : int):
 
-        self.bond_level.setMaximum(len(base_stats) + 1)
+        self.bond_level.setMaximum(max_bond_lvl)
         self.bond_level.setValue(bond_lvl)
 
         self.hp_bar.setMaximum(base_stats["hp"])
