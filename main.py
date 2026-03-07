@@ -1,4 +1,4 @@
-from ui import (tomos_ui, todo_ui)
+from ui import (tomos_ui, todo_ui, pomo_ui)
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
@@ -9,8 +9,9 @@ app = QApplication(sys.argv)
 
 todo_view = todo_ui.TodoView.get_user_todo_view()
 tomo_view = tomos_ui.TomoViewManager.get_tomos_view()
+pomo_view = pomo_ui.PomoView.get_pomo_view()
 
-views = [todo_view, tomo_view]
+views = [todo_view, tomo_view, pomo_view]
 
 for view in views:
         view.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)

@@ -30,8 +30,8 @@ class BaseTimer():
     # function used by IteratingTimer class to iterate timer
     def iterate_timer(self):
         self.elapsed += 1
-        # triggers timer iteration event, passing in the timer as argument
-        events.pomo_topic.get_event("TIMER_ITERATED").trigger(self)
+        # triggers timer iteration event, passing in the elapsed as argument
+        events.pomo_topic.get_event("TIMER_ITERATED").trigger(self.elapsed)
 
         # if the elapsed time is more than duration, carry out completion stuff
         if self.elapsed >= self.duration:
@@ -85,7 +85,7 @@ class _PomodoroTimer():
             raise ValueError("Invalid difficulty value as argument for PomodoroTimer")
 
         self.difficulties = {}
-        self.difficulties : dict[int : (int, int)]
+        self.difficulties : dict[int, tuple[int, int]]
         self.difficulty = difficulty
 
         # retrieves the user saved difficulties for each pomodoro split
@@ -185,9 +185,11 @@ class _PomodoroTimer():
         if self.modify_bin:
             data.modify_pomo_difficulties(*[pomo_difficulty for pomo_difficulty in self.modify_bin])
 
-    def get_split(self, difficulty : int):
-
-        self.validate_difficulty(difficulty)
+    def get_split(self, difficulty : int = None):
+        if difficulty:
+            self.validate_difficulty(difficulty)
+        else:
+            difficulty = self.difficulty
         return self.difficulties[difficulty]
 
     def current_timer(self) -> BaseTimer:
