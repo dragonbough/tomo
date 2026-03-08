@@ -21,11 +21,8 @@ class IteratingTimer(Timer):
 class BaseTimer():
 
     def __init__(self, duration : int):
-        self.elapsed = 0
         self.duration = duration
-        self.iterating_timer = IteratingTimer(interval=1, function=self.iterate_timer)
-        self.finished = False
-        self.paused = False
+        self.reset_timer()
 
     # function used by IteratingTimer class to iterate timer
     def iterate_timer(self):
@@ -42,35 +39,43 @@ class BaseTimer():
         # triggers TIMER_COMPLETED event passing this timer as argument, before resetting timer
         # ENSURE THE TIMER IS DECLARED AS FINISHED BEFORE BROADCASTING EVENT -- ALL CALLBACKS MUST KNOW IT AS FINISHED VIA THIS EVENT
         # AS IT IS QUICKLY TURNED BACK TO UNFINISHED IN THE RESET_TIMER METHOD
+        print("POMO SYSTEM: TIMER FINISHED")
         self.iterating_timer.finished.set()
         self.finished = True
         events.pomo_topic.get_event("TIMER_COMPLETED").trigger(self)
         self.reset_timer()
 
     def start_timer(self):
+        print("POMO SYSTEM: TIMER STARTED")
+        # if the iterating timer thread hasnt even been activated yet, then start the thread
+        if self.elapsed == -1:
+            self.elapsed = 0
+            self.iterating_timer.start()
         # if the timer is paused then just unpause it
         if self.paused:
             self.iterating_timer.paused.clear()
             self.paused = False
-        # if the timer is not paused, its bcs its been reset (new thread) so just start the new thread
-        elif self.iterating_timer.is_alive() == False:
-            self.iterating_timer.start()
 
     # activates paused thread event -- stops function from occuring every interval but thread is still alive
     def pause_timer(self):
+        print(f"POMO SYSTEM: TIMER PAUSED")
         self.iterating_timer.paused.set()
         self.paused = True
 
     # creates a new timer thread to replace prev one, and resets elapsed time, finished status and paused status
     def reset_timer(self):
         self.iterating_timer = IteratingTimer(interval=1, function=self.iterate_timer)
-        self.elapsed = 0
+        self.elapsed = -1
         self.finished = False
-        self.paused = False
+        self.pause_timer()
 
     # returns boolean representing whether the timer is currently running or not
     def is_running(self):
-        return self.iterating_timer.is_alive() and not(self.paused or self.finished)
+        return not(self.paused or self.finished)
+
+    # kills the timer
+    def kill(self):
+        self.iterating_timer.cancel()
 
 # singleton object (you can only have 1 at a time) -- singleton implementation from Christian Meyer -- https://code.activestate.com/recipes/52558/#c7
 # object consisting of two timers -- current timer is dependent on pomodoro focus mode
@@ -135,6 +140,11 @@ class _PomodoroTimer():
         self.difficulty = difficulty
 
         focus_duration, rest_duration = self.get_split(self.difficulty)
+
+        if self.focus_timer:
+            self.focus_timer.kill()
+        if self.rest_timer:
+            self.rest_timer.kill()
 
         self.focus_timer = BaseTimer(duration=focus_duration)
         self.rest_timer = BaseTimer(duration=rest_duration)
@@ -206,6 +216,9 @@ class _PomodoroTimer():
 
     def reset_timer(self):
         self.current_timer().reset_timer()
+
+    def kill_timer(self):
+        self.current_timer().kill()
 
 # the unique singleton object
 _pomodoro_timer_singleton = None

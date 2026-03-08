@@ -43,7 +43,7 @@ class TomoViewManager(QWidget):
             event.register(self.stat_update_event)
 
         self.list_view = TomoListView(self, self.tomos.get_tomos())
-        self.tab_widget.addTab(self.list_view, "Your Tomos")
+        self.tab_widget.addTab(self.list_view, "Your tomos")
 
         self.sprite_view.display_view()
         self.stat_update_event(self.tomos.current_tomo)

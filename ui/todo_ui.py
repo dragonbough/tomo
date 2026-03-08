@@ -1,4 +1,4 @@
-from core import todos
+from core import todos, events
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (QWidget, QTreeWidget, QTreeWidgetItem,
@@ -11,7 +11,6 @@ from PyQt6.QtGui import QIcon
 # allows closing the application using CTRL + C (DEBUG)
 import signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
-from PyQt6 import sip
 
 # individual item containing a single Todo's information -- does not store Todo contents but acts as reference to the backend Todo object via todo_id
 class TodoViewItem(QTreeWidgetItem):
@@ -219,6 +218,7 @@ class TodoView(QTreeWidget):
 
         self.itemExpanded.connect(self.resize_self)
         self.itemCollapsed.connect(self.resize_self)
+        self.currentItemChanged.connect(self.broadcast_todo_selection)
 
         # hovering over an todoviewitem shows its add button -- mouse tracking has to be True for this to work
         self.setMouseTracking(True)
@@ -227,6 +227,12 @@ class TodoView(QTreeWidget):
         self.init_add_button_item(refresh=False)
 
         self.resize_self()
+
+    # used to tell the pomodoro ui the difficulty of the currently selected todo
+    def broadcast_todo_selection(self, current_item : TodoViewItem):
+        if current_item.item_id:
+            todo_difficulty = self.todo_list.get_todo(current_item.item_id).difficulty
+            events.todo_topic.get_event("TODO_SELECTED").trigger(todo_difficulty)
 
     # keeps reference to todoviewitem in self.items
     def add_todo_item(self, item : TodoViewItem):

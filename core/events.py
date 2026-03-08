@@ -128,6 +128,7 @@ class Stream():
 # topic for events from todos.py
 todo_topic = Topic()
 todo_topic.create_event("TODO_COMPLETED")
+todo_topic.create_event("TODO_SELECTED")
 
 # topic for events from tomos.py
 # these events may be passed into the finite state machine of the currently selected tomo
