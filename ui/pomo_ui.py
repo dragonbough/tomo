@@ -1,8 +1,8 @@
 from core import pomos, events
 import datetime
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QProgressBar, QPushButton, QStackedLayout, QStyleFactory, QToolButton)
+from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QProgressBar, QStackedLayout, QStyleFactory, QToolButton, QHBoxLayout)
 from PyQt6.QtGui import (QIcon)
 
 class PomoView(QWidget):
@@ -30,10 +30,9 @@ class PomoView(QWidget):
         self.play_button  = QToolButton()
         play_button_icon = QIcon.fromTheme(QIcon.ThemeIcon.MediaPlaybackStart)
         self.play_button.setIcon(play_button_icon)
-        self.play_button.setText("Select a todo")
         self.play_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        self.disable_start_button()
         self.play_button.clicked.connect(self.start_timer_view)
-        self.play_button.setEnabled(False)
         self.idle_view_layout.addWidget(self.play_button, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.stacked_layout.setCurrentWidget(self.idle_view_widget)
@@ -53,27 +52,60 @@ class PomoView(QWidget):
 
         self.timer_toggle_button = QToolButton()
         self.timer_toggle_button.clicked.connect(self.toggle_pomo_timer)
-        self.timer_toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        self.timer_toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.timer_view_layout.addWidget(self.timer_toggle_button, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        self.reset_timer_button = QPushButton()
+        # contains the buttons available to the user when the timer is paused
+        self.paused_buttons_widget = QWidget()
+        self.paused_buttons_layout = QHBoxLayout()
+        self.paused_buttons_widget.setLayout(self.paused_buttons_layout)
+
+        self.reset_timer_button = QToolButton()
         self.reset_timer_button.setText("Reset")
+        reset_button_icon = QIcon.fromTheme(QIcon.ThemeIcon.SystemReboot)
+        self.reset_timer_button.setIcon(reset_button_icon)
+        self.reset_timer_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.reset_timer_button.clicked.connect(self.reset_pomo_timer)
-        self.timer_view_layout.addWidget(self.reset_timer_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self.paused_buttons_layout.addWidget(self.reset_timer_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        self.cancel_timer_button = QToolButton()
+        self.cancel_timer_button.setText("Cancel")
+        cancel_button_icon = QIcon.fromTheme(QIcon.ThemeIcon.WindowClose)
+        self.cancel_timer_button.setIcon(cancel_button_icon)
+        self.cancel_timer_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.cancel_timer_button.clicked.connect(self.cancel_pomo_timer)
+        self.paused_buttons_layout.addWidget(self.cancel_timer_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        self.timer_view_layout.addWidget(self.paused_buttons_widget, alignment=Qt.AlignmentFlag.AlignHCenter)
+        paused_buttons_sp = self.paused_buttons_widget.sizePolicy()
+        paused_buttons_sp.setRetainSizeWhenHidden(True)
+        self.paused_buttons_widget.setSizePolicy(paused_buttons_sp)
 
         self.play_button.setIconSize(self.idle_view_widget.sizeHint())
         self.play_button.setFixedSize(self.idle_view_widget.sizeHint())
 
         self.update_timer_buttons()
 
+        self.timer_toggle_button.setIconSize(self.reset_timer_button.iconSize())
+        self.timer_toggle_button.setFixedSize(self.reset_timer_button.sizeHint())
+
         events.todo_topic.get_event("TODO_SELECTED").register(self.enable_start_button)
         events.pomo_topic.get_event("TIMER_COMPLETED").register(self.update_timer_view)
 
     # when a todo is selected, set the difficulty of the pomodoro timer to the difficulty of the todo and enable the start timer button
     def enable_start_button(self, todo_difficulty : int):
+        # a difficulty of -1 means that no todo is selected
+        if todo_difficulty == -1:
+            self.disable_start_button()
+            return
         self.pomo_timer.set_difficulty(todo_difficulty)
         self.play_button.setText("Start Focus Period")
         self.play_button.setEnabled(True)
+
+    # happens when a todo is not selected / deselected -- goes back to original disabled state
+    def disable_start_button(self):
+        self.play_button.setText("Select a todo")
+        self.play_button.setEnabled(False)
 
     # starts the display of the pomodoro timer
     def start_timer_view(self, difficulty : int):
@@ -82,7 +114,7 @@ class PomoView(QWidget):
         self.stacked_layout.setCurrentWidget(self.timer_view_widget)
         self.timer_view.start_view(durations=durations, focus_mode=True)
         self.update_rounds(self.pomo_timer.rounds)
-        self.setFixedHeight(350)
+        # self.setFixedHeight(350)
 
     # updates timer view (whenever the timer is completed)
     def update_timer_view(self):
@@ -98,10 +130,16 @@ class PomoView(QWidget):
             self.pomo_timer.start_timer()
         self.update_timer_buttons()
 
-    # resets the pomodoro timer
+    # resets the pomodoro timer/
     def reset_pomo_timer(self):
         self.pomo_timer.reset_timer()
-        self.timer_view.set_elapsed(0)
+        self.update_timer_view()
+
+    # cancels the focus period, no xp rewarded
+    def cancel_pomo_timer(self):
+        self.pomo_timer.kill_timer()
+        events.pomo_topic.get_event("FOCUS_PERIOD_CANCELLED").trigger()
+        self.stacked_layout.setCurrentWidget(self.idle_view_widget)
 
     # update the rounds label
     def update_rounds(self, rounds : int):
@@ -112,11 +150,11 @@ class PomoView(QWidget):
         if self.pomo_timer.current_timer().is_running():
             timer_button_icon = QIcon.fromTheme(QIcon.ThemeIcon.MediaPlaybackPause)
             self.timer_toggle_button.setText("PAUSE")
-            self.reset_timer_button.hide()
+            self.paused_buttons_widget.hide()
         else:
             self.timer_toggle_button.setText("START")
             timer_button_icon = QIcon.fromTheme(QIcon.ThemeIcon.MediaPlaybackStart)
-            self.reset_timer_button.show()
+            self.paused_buttons_widget.show()
         self.timer_toggle_button.setIcon(timer_button_icon)
 
     # what happens when the window is closed

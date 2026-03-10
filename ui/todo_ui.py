@@ -190,13 +190,21 @@ class TodoView(QTreeWidget):
         self.todo_list = todo_list
         self.items : list[TodoViewItem] = []
 
+        self.focussed_item : TodoViewItem = None
+        events.pomo_topic.get_event("FOCUS_PERIOD_STARTED").register(self.focus_todo_item)
+        events.pomo_topic.get_event("FOCUS_PERIOD_CANCELLED").register(self.cancel_focus)
+
         # sets up each column of the todo view
         self.setHeaderLabels(["", "Difficulty"])
         self.header().setStretchLastSection(False)
         self.setUniformRowHeights(True)
 
         self.min_todo_width = 400
+        self.max_todo_width = 500
+        self.min_difficulty_width = 50
         self.max_difficulty_width = 100
+        self.min_height : int = None
+        self.max_height = 350
 
         # adds top level items for the root nodes in the todo list
         todo_view_roots = [TodoViewItem(root_todo.todo_id, self) for root_todo in todo_list.get_roots()]
@@ -228,11 +236,33 @@ class TodoView(QTreeWidget):
 
         self.resize_self()
 
+    # focusses the todo item whenever a focus period starts -- no editing can be made until the todo is completed or the focus period is cancelled
+    def focus_todo_item(self):
+        self.focussed_item : TodoViewItem = self.currentItem()
+        self.focussed_item.setExpanded(True)
+        for item in self.items:
+            if item != self.focussed_item:
+                item.setDisabled(True)
+                if item.parent() != self.focussed_item:
+                    item.item_checkbox.setEnabled(False)
+            item.toggle_item_buttons(False)
+
+    # cancels the focus period stuff
+    def cancel_focus(self):
+        self.focussed_item = None
+        self.collapseAll()
+        self.setCurrentItem(None)
+        self.clearSelection()
+        for item in self.items:
+            item.setDisabled(False)
+            item.item_checkbox.setEnabled(True)
+
     # used to tell the pomodoro ui the difficulty of the currently selected todo
     def broadcast_todo_selection(self, current_item : TodoViewItem):
-        if current_item.item_id:
+        todo_difficulty = -1
+        if current_item and current_item.item_id and not self.focussed_item:
             todo_difficulty = self.todo_list.get_todo(current_item.item_id).difficulty
-            events.todo_topic.get_event("TODO_SELECTED").trigger(todo_difficulty)
+        events.todo_topic.get_event("TODO_SELECTED").trigger(todo_difficulty)
 
     # keeps reference to todoviewitem in self.items
     def add_todo_item(self, item : TodoViewItem):
@@ -313,6 +343,9 @@ class TodoView(QTreeWidget):
     # shows/hides button used to add todos/subtodos
     def mouseMoveEvent(self, event):
 
+        if self.focussed_item:
+            return
+
         hovered_widget = self.viewport().childAt(event.pos())
         hovered_item = self.itemAt(event.pos())
 
@@ -337,7 +370,8 @@ class TodoView(QTreeWidget):
     # ItemActivated signal is broadcast then toggle edit of that item
     def toggle_edit(self, item : TodoViewItem):
 
-        if type(item) != TodoViewItem:
+        # edits cant be toggled while there is a todoviewitem focussed
+        if type(item) != TodoViewItem or self.focussed_item:
             return
 
         if not self.editing_item:
@@ -353,6 +387,12 @@ class TodoView(QTreeWidget):
                     self.editing_item = item
 
         self.adjust_col_width()
+
+    # allows for deselecting items by clicking on a non-item -- clicked() signal sent after deselecting so if nothing intercepts it stays deselected
+    def mousePressEvent(self, e):
+        self.clearSelection()
+        self.setCurrentItem(None)
+        return super().mousePressEvent(e)
 
     # creates an empty todoviewitem under a provided parent, which turns into an empty, editable item
     def create_todo_item(self, parent : TodoViewItem = None):
@@ -400,6 +440,7 @@ class TodoView(QTreeWidget):
     def delete_todo_item(self, item : TodoViewItem):
         if self.editing_item:
             self.toggle_edit(self.editing_item)
+        # returns false if the user clicks No
         if self.show_delete_dialog() == False:
             return
         if item.item_id:
@@ -417,17 +458,31 @@ class TodoView(QTreeWidget):
             item_parent.removeChild(item)
         else:
             self.takeTopLevelItem(self.indexOfTopLevelItem(item))
+        # ensures that its not saved as an item being hovered over anymore
+        if self.current_hover_item == item:
+            self.current_hover_item = None
+        self.resize_to_item_heights()
+
+    def set_min_height(self, min_height : int | None):
+        self.min_height = min_height
+        self.resize_to_item_heights()
+
+    # sets the maximum height of the todoview -- this is useful for resizing to other things in the main view
+    def set_max_height(self, max_height : int):
+        self.max_height = max_height
         self.resize_to_item_heights()
 
     # resizes the item heights to content
     def resize_to_item_heights(self):
-        min_height = self.visualItemRect(self.add_button_item).height() + self.header().height() + 5
-        max_height = 350
+        total_item_height = self.visualItemRect(self.add_button_item).height() + self.header().height() + 5
         for item in self.items:
             if item.parent() and not item.parent().isExpanded():
                 continue
-            min_height += self.visualItemRect(item).height()
-        self.setFixedHeight(min(min_height, max_height))
+            total_item_height += self.visualItemRect(item).height()
+
+        if self.min_height and total_item_height < self.min_height:
+            total_item_height = self.min_height
+        self.setFixedHeight(min(total_item_height, self.max_height))
 
     def adjust_col_width(self):
 
@@ -435,13 +490,19 @@ class TodoView(QTreeWidget):
         if self.columnWidth(0) < self.min_todo_width:
             self.setColumnWidth(0, self.min_todo_width)
 
+        if self.columnWidth(0) > self.max_todo_width:
+            self.setColumnWidth(0, self.max_todo_width)
+
         # resizing the difficulty column width
         if self.columnWidth(1) > self.max_difficulty_width:
             self.setColumnWidth(1, self.max_difficulty_width)
+        if self.columnWidth(1) < self.min_difficulty_width:
+            self.setColumnWidth(1, self.min_difficulty_width)
 
         # adjusts the window size to fit the col width change
         self.adjustSize()
-        self.setFixedWidth(self.columnWidth(0) + self.columnWidth(1))
+        self.setMinimumWidth(self.columnWidth(0) + self.columnWidth(1))
+        self.setMaximumWidth(self.max_todo_width + self.max_difficulty_width)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
     def resize_self(self):
