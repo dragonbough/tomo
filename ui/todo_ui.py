@@ -240,9 +240,11 @@ class TodoView(QTreeWidget):
     def focus_todo_item(self):
         self.focussed_item : TodoViewItem = self.currentItem()
         self.focussed_item.setExpanded(True)
+        self.add_button_item.setHidden(True)
         for item in self.items:
             if item != self.focussed_item:
                 item.setDisabled(True)
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemNeverHasChildren)
                 if item.parent() != self.focussed_item:
                     item.item_checkbox.setEnabled(False)
             item.toggle_item_buttons(False)
@@ -251,16 +253,18 @@ class TodoView(QTreeWidget):
     def cancel_focus(self):
         self.focussed_item = None
         self.collapseAll()
+        self.add_button_item.setHidden(False)
         self.setCurrentItem(None)
         self.clearSelection()
         for item in self.items:
             item.setDisabled(False)
             item.item_checkbox.setEnabled(True)
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemNeverHasChildren)
 
     # used to tell the pomodoro ui the difficulty of the currently selected todo
     def broadcast_todo_selection(self, current_item : TodoViewItem):
         todo_difficulty = -1
-        if current_item and current_item.item_id and not self.focussed_item:
+        if current_item and current_item.item_id and not self.focussed_item and self.get_item_todo(current_item).completed == False:
             todo_difficulty = self.todo_list.get_todo(current_item.item_id).difficulty
         events.todo_topic.get_event("TODO_SELECTED").trigger(todo_difficulty)
 
@@ -334,6 +338,10 @@ class TodoView(QTreeWidget):
         todo = self.todo_list.get_todo(todo_view_item.item_id)
         self.todo_list.complete_todo(todo=todo, completion=checked)
         self.refresh_completed_items()
+        # if the completed item was part of a focus period trigger the focus_period_completed event
+        if todo_view_item == self.focussed_item:
+            events.pomo_topic.get_event("FOCUS_PERIOD_COMPLETED").trigger()
+            self.cancel_focus()
 
     # refreshes the completion status for all of the items
     def refresh_completed_items(self):

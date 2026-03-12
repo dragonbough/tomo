@@ -36,9 +36,14 @@ class MainView(QMainWindow):
         self.setWindowFlag(Qt.WindowType.CustomizeWindowHint, True)
         self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
 
+        self.tomo_view.set_scale(1)
+
         # basically the same as setting a fixed height
         self.todo_view.set_min_height(self.tomo_view.height())
         self.todo_view.set_max_height(self.tomo_view.height())
+        self.pomo_view.setFixedHeight(self.tomo_view.height())
+
+        self.setFixedSize(self.sizeHint())
 
     # allows each view to detach into their own separate moveable windows
     # NOT COMPLETED

@@ -1,7 +1,7 @@
 from core import tomos, events
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QLabel, QScrollArea, QPushButton, QSizePolicy)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QLabel, QScrollArea, QPushButton, QSizePolicy, QFrame, QStyleFactory)
 from PyQt6.QtGui import QPixmap, QColor, QImage, QIcon
 
 # relative to /core. useful for retrieving sprites
@@ -79,6 +79,14 @@ class TomoViewManager(QWidget):
         self.sprite_view.activate_response_icon(state.name)
         state.set_callback(self.sprite_view.activate_response_icon)
 
+    def set_scale(self, scale_x : float, scale_y : float = None):
+        if not scale_y:
+            scale_y = scale_x
+        self.setFixedWidth(round(self.width() * scale_x))
+        self.setFixedHeight(round(self.height() * scale_y))
+        self.sprite_view.set_scale(scale_x, scale_y)
+        # self.stat_view.set_scale(scale_x, scale_y)
+
     # what happens on quit of this window/widget
     def quit_proc(self):
         self.tomos.update_tomos()
@@ -93,6 +101,7 @@ class TomoSpriteView(QGraphicsView):
 
         self.frame_size = 200, 200
         self.setFixedSize(*self.frame_size)
+        self.setFrameStyle(QFrame.Shape.NoFrame)
 
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -110,6 +119,15 @@ class TomoSpriteView(QGraphicsView):
     def update_sprite(self, sprite_path : str):
         print(f"TOMO UI: updating sprite")
         self.painter.set_tomo_sprite(sprite_path)
+
+    def set_scale(self, scale_x : float, scale_y : float):
+        self.setFixedHeight(round(self.height() * scale_y))
+        self.setFixedWidth(round(self.width() * scale_x))
+
+    # ensures the scene is fully visible
+    def resizeEvent(self, event):
+        self.fitInView(self.painter.sceneRect())
+        return super().resizeEvent(event)
 
 # constructs the scene by creating and adopting TomoSprite objects -- choosing what is displayed and where
 class TomoSpriteConstructor(QGraphicsScene):
@@ -239,10 +257,7 @@ class TomoStatView(QWidget):
         self.bond_level = QProgressBar()
         self.bond_level.setFormat("BOND LVL: %v")
         self.bond_level.setMinimum(1)
-        # you can think about centering this later in css -- windows 11 styling doesnt support centering or thick bars
-        # self.bond_level.setStyleSheet('text-align: center')
-        # or
-        # self.bond_level.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.bond_level.setStyle(QStyleFactory.create("Fusion"))
 
         self.stat_layout.addWidget(self.bond_level)
 

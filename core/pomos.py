@@ -115,13 +115,14 @@ class _PomodoroTimer():
         # defines the current pomodoro mode and the number of rounds
         self.focus_mode = True
         self.rounds = 0
+        self.total_elapsed = 0
 
         # defines the bin used to save updates to difficulty presets
         self.modify_bin = []
 
         # registers callback to timer completion
         events.pomo_topic.get_event("TIMER_COMPLETED").register(self.switch_focus)
-
+        events.pomo_topic.get_event("TIMER_ITERATED").register(self.update_total_elapsed)
 
     # on a timer completion event, the focus mode of the pomodoro timer is switched and the current timer changes
     # number of rounds incremented if the previous timer was a rest
@@ -202,6 +203,13 @@ class _PomodoroTimer():
             difficulty = self.difficulty
         return self.difficulties[difficulty]
 
+    def reset_total_elapsed(self):
+        self.total_elapsed = 0
+
+    # updates the total elapsed time for the pomodoro timer
+    def update_total_elapsed(self):
+        self.total_elapsed += 1
+
     def current_timer(self) -> BaseTimer:
         return self.timers[self.focus_mode]
 
@@ -219,6 +227,9 @@ class _PomodoroTimer():
 
     def kill_timer(self):
         self.current_timer().kill()
+
+    def get_total_elapsed(self):
+        return self.total_elapsed
 
 # the unique singleton object
 _pomodoro_timer_singleton = None

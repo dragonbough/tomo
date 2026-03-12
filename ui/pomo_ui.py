@@ -81,6 +81,19 @@ class PomoView(QWidget):
         paused_buttons_sp.setRetainSizeWhenHidden(True)
         self.paused_buttons_widget.setSizePolicy(paused_buttons_sp)
 
+        self.focus_completed_widget = QWidget()
+        self.stacked_layout.addWidget(self.focus_completed_widget)
+
+        self.focus_completed_layout = QVBoxLayout()
+        self.focus_completed_widget.setLayout(self.focus_completed_layout)
+
+        self.completion_text = QLabel("""<h1>Focus Period Completed!</h1>""")
+        self.completion_stats = QLabel("""<b>Difficulty:</b> {difficulty} <br>
+                                      <b>Rounds:</b> {rounds} rounds<br>
+                                      <b>Total Duration:</b> {duration}""")
+        self.focus_completed_layout.addWidget(self.completion_text, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self.focus_completed_layout.addWidget(self.completion_stats, alignment=Qt.AlignmentFlag.AlignHCenter)
+
         self.play_button.setIconSize(self.idle_view_widget.sizeHint())
         self.play_button.setFixedSize(self.idle_view_widget.sizeHint())
 
@@ -91,10 +104,13 @@ class PomoView(QWidget):
 
         events.todo_topic.get_event("TODO_SELECTED").register(self.enable_start_button)
         events.pomo_topic.get_event("TIMER_COMPLETED").register(self.update_timer_view)
+        events.pomo_topic.get_event("FOCUS_PERIOD_COMPLETED").register(self.show_focus_stats)
 
     # when a todo is selected, set the difficulty of the pomodoro timer to the difficulty of the todo and enable the start timer button
     def enable_start_button(self, todo_difficulty : int):
-        # a difficulty of -1 means that no todo is selected
+        if self.stacked_layout.currentWidget() == self.focus_completed_widget:
+            self.stacked_layout.setCurrentWidget(self.idle_view_widget)
+        # a difficulty of -1 means that no todo is selected / the todo is invalid (e.g completed)
         if todo_difficulty == -1:
             self.disable_start_button()
             return
@@ -113,8 +129,8 @@ class PomoView(QWidget):
         durations = self.pomo_timer.get_split(difficulty)
         self.stacked_layout.setCurrentWidget(self.timer_view_widget)
         self.timer_view.start_view(durations=durations, focus_mode=True)
+        self.pomo_timer.reset_total_elapsed()
         self.update_rounds(self.pomo_timer.rounds)
-        # self.setFixedHeight(350)
 
     # updates timer view (whenever the timer is completed)
     def update_timer_view(self):
@@ -156,6 +172,20 @@ class PomoView(QWidget):
             timer_button_icon = QIcon.fromTheme(QIcon.ThemeIcon.MediaPlaybackStart)
             self.paused_buttons_widget.show()
         self.timer_toggle_button.setIcon(timer_button_icon)
+
+    # shows stats about the completion of a focus period
+    def show_focus_stats(self):
+        if self.pomo_timer.current_timer().is_running():
+            self.pomo_timer.current_timer().pause_timer()
+        if self.stacked_layout.currentWidget() != self.timer_view_widget:
+            return
+        self.stacked_layout.setCurrentWidget(self.focus_completed_widget)
+        difficulties = ["Trivial", "Easy", "Normal", "Hard"]
+        difficulty = difficulties[self.pomo_timer.difficulty - 1]
+        rounds = self.pomo_timer.rounds
+        duration = str(datetime.timedelta(seconds=self.pomo_timer.get_total_elapsed()))
+        self.completion_stats.setText(self.completion_stats.text().format(difficulty=difficulty, rounds=rounds, duration=duration))
+        self.pomo_timer.kill_timer()
 
     # what happens when the window is closed
     def quit_proc(self):
