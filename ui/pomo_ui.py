@@ -1,7 +1,7 @@
 from core import pomos, events
 import datetime
 
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QProgressBar, QStackedLayout, QStyleFactory, QToolButton, QHBoxLayout)
 from PyQt6.QtGui import (QIcon)
 
@@ -17,7 +17,6 @@ class PomoView(QWidget):
         self.setWindowTitle("tomo | pomo")
 
         self.pomo_timer = pomos.PomodoroTimer()
-
         self.stacked_layout = QStackedLayout(self)
 
         # icon that will be used to start the timer for the currently selected Todo
@@ -47,7 +46,11 @@ class PomoView(QWidget):
         self.timer_view_layout.addWidget(self.rounds, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         self.timer_view = PomoTimerView()
-        events.pomo_topic.get_event("TIMER_ITERATED").register(self.timer_view.set_elapsed)
+
+        # triggers signal instead of directly calling function to allow function to work from another thread
+        # we use a lambda function to allow the events.py callback arg passing to work
+        events.pomo_topic.get_event("TIMER_ITERATED").register(lambda elapsed : self.timer_view.elapse_signal.emit(elapsed))
+
         self.timer_view_layout.addWidget(self.timer_view, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         self.timer_toggle_button = QToolButton()
@@ -91,6 +94,8 @@ class PomoView(QWidget):
         self.completion_stats = QLabel("""<b>Difficulty:</b> {difficulty} <br>
                                       <b>Rounds:</b> {rounds} rounds<br>
                                       <b>Total Duration:</b> {duration}""")
+        self.completion_text.setWordWrap(True)
+        self.completion_stats.setWordWrap(True)
         self.focus_completed_layout.addWidget(self.completion_text, alignment=Qt.AlignmentFlag.AlignHCenter)
         self.focus_completed_layout.addWidget(self.completion_stats, alignment=Qt.AlignmentFlag.AlignHCenter)
 
@@ -106,10 +111,16 @@ class PomoView(QWidget):
         events.pomo_topic.get_event("TIMER_COMPLETED").register(self.update_timer_view)
         events.pomo_topic.get_event("FOCUS_PERIOD_COMPLETED").register(self.show_focus_stats)
 
+    def set_max_width(self, max_width : int):
+        self.setMaximumWidth(max_width)
+        self.completion_text.adjustSize()
+        self.completion_stats.adjustSize()
+
     # when a todo is selected, set the difficulty of the pomodoro timer to the difficulty of the todo and enable the start timer button
     def enable_start_button(self, todo_difficulty : int):
         if self.stacked_layout.currentWidget() == self.focus_completed_widget:
-            self.stacked_layout.setCurrentWidget(self.idle_view_widget)
+            if todo_difficulty != -1:
+                self.stacked_layout.setCurrentWidget(self.idle_view_widget)
         # a difficulty of -1 means that no todo is selected / the todo is invalid (e.g completed)
         if todo_difficulty == -1:
             self.disable_start_button()
@@ -175,24 +186,30 @@ class PomoView(QWidget):
 
     # shows stats about the completion of a focus period
     def show_focus_stats(self):
-        if self.pomo_timer.current_timer().is_running():
-            self.pomo_timer.current_timer().pause_timer()
+        # if its not in the focus period screen before this is called dont bother
         if self.stacked_layout.currentWidget() != self.timer_view_widget:
             return
+        if self.pomo_timer.current_timer().is_running():
+            self.pomo_timer.current_timer().pause_timer()
         self.stacked_layout.setCurrentWidget(self.focus_completed_widget)
         difficulties = ["Trivial", "Easy", "Normal", "Hard"]
         difficulty = difficulties[self.pomo_timer.difficulty - 1]
         rounds = self.pomo_timer.rounds
         duration = str(datetime.timedelta(seconds=self.pomo_timer.get_total_elapsed()))
         self.completion_stats.setText(self.completion_stats.text().format(difficulty=difficulty, rounds=rounds, duration=duration))
-        self.pomo_timer.kill_timer()
+        self.pomo_timer.current_timer().finish_timer()
 
     # what happens when the window is closed
     def quit_proc(self):
         self.pomo_timer.kill_timer()
+        pomos.tick_timer.kill_timer()
 
 # progress bar that ticks with the pomodoro timer
 class PomoTimerView(QProgressBar):
+
+    # signals allow for updates of the main thread's Qobjects from another thread
+    # signal used to set the elapsed time of the pomodoro timer
+    elapse_signal = pyqtSignal(int)
 
     # this is only initialised to ensure everything is already there
     def __init__(self):
@@ -205,6 +222,8 @@ class PomoTimerView(QProgressBar):
         self.setMaximum(0)
         self.setStyle(QStyleFactory.create("Fusion"))
         self.setMinimumWidth(50)
+
+        self.elapse_signal.connect(self.set_elapsed)
 
     # creates the timer
     def start_view(self, durations : tuple[int, int], focus_mode : bool, elapsed : int = 0):

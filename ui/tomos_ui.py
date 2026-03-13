@@ -45,6 +45,10 @@ class TomoViewManager(QWidget):
         self.list_view = TomoListView(self, self.tomos.get_tomos())
         self.tab_widget.addTab(self.list_view, "Your tomos")
 
+        events.pomo_topic.get_event("FOCUS_PERIOD_STARTED").register(self.activate_fp_lock)
+        for event in events.pomo_topic.get_events("FOCUS_PERIOD_CANCELLED", "FOCUS_PERIOD_COMPLETED"):
+            event.register(self.deactivate_fp_lock)
+
         self.sprite_view.display_view()
         self.stat_update_event(self.tomos.current_tomo)
 
@@ -55,6 +59,13 @@ class TomoViewManager(QWidget):
         self.fixed_size = self.sizeHint()
         self.setFixedWidth(self.fixed_size.width())
         self.setFixedHeight(350)
+
+    # blocks user from switching tomos
+    def activate_fp_lock(self):
+        self.tab_widget.setTabEnabled(self.tab_widget.indexOf(self.list_view), False)
+
+    def deactivate_fp_lock(self):
+        self.tab_widget.setTabEnabled(self.tab_widget.indexOf(self.list_view), True)
 
     # switch out current tomo for another
     def switch_tomo(self, tomo_id : int):

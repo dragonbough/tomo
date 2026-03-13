@@ -212,9 +212,16 @@ class Tomo():
             if event.name != "STATE_CHANGED":
                 event.register(self.check_for_fsm_input)
 
+        events.pomo_topic.get_event("TICK_TIMER_ITERATED").register(self.tick_stats)
+
         # main_fsm -- default tomo fsm config
         self.fsm = StateMachine(str(folder_path / "main_fsm"), start_state=last_behaviour)
         self.check_for_fsm_input()
+
+    # decrements the tomo's xp / hp over time / recovers hp, depending on factors
+    def tick_stats(timestamp : float):
+        # TO BE IMPLEMENTED NEXT
+        pass
 
     # checks for transition, and if so, triggered STATE_CHANGED event -- also handles incorrect inputs without crashing program
     def tick_fsm(self, input : str = None):
@@ -225,7 +232,6 @@ class Tomo():
             except KeyError:
                 print(f"TOMO SYSTEM: FSM -- invalid input (\"{input}\") into state machine, executing regardless")
                 self.fsm.current_state.execute(self.fsm.current_state.name)
-
 
     # checks for whether any requirements have been met to pass in a certain input into the finite state machine
     def check_for_fsm_input(self):
@@ -385,8 +391,7 @@ class UserTomos():
         self.current_tomo = None
 
         # registers xp increase of selected tomo to the todo completion event
-        func = lambda todo : self.current_tomo.increase_stat(xp=todo.difficulty) if self.current_tomo else print("No tomo selected")
-        events.todo_topic.get_event("TODO_COMPLETED").register(func)
+        events.todo_topic.get_event("TODO_COMPLETED").register(self.todo_completion)
 
     # the events that occur when a todo is completed
     # (xp increase, etc)

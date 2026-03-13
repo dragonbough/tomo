@@ -34,7 +34,7 @@ class Observable():
         self.topic.log_event(event_name=self.name, timestamp=get_program_elapsed())
 
         for callback in self.callbacks:
-            print(f"EVENT SYSTEM: Executing {callback.__name__} callback function:")
+            print(f"EVENT SYSTEM: Executing {callback.__name__} callback function")
 
             # ensures that if the number of arguments passed into this method exceed the number of available parameters in the callback function, it will use the least amount available
             event_arg_count = len(event_args)
@@ -42,7 +42,7 @@ class Observable():
 
             final_event_args = event_args[:min(event_arg_count, callback_arg_count)] if callback_arg_count > 0 else None
 
-            print(f"EVENT SYSTEM: original args {event_args} final args {final_event_args}")
+            # print(f"EVENT SYSTEM: original args {event_args} final args {final_event_args}")
 
             if final_event_args:
                 callback(*final_event_args)
@@ -135,6 +135,9 @@ todo_topic.create_event("TODO_SELECTED")
 tomo_topic = Topic()
 tomo_topic.create_event("XP_INCREASED")
 tomo_topic.create_event("LVL_INCREASED")
+tomo_topic.create_event("XP_DECREASED")
+tomo_topic.create_event("LVL_DECREASED")
+tomo_topic.create_event("HP_DECREASED")
 
 # triggers when a state in a tomo fsm is changed -- allows other things to respond to its events
 # passes tomo object -- its current state is the new state, and its callback can be set to something that the thing wants to do on occurence of that state in the future
@@ -142,6 +145,7 @@ tomo_topic.create_event("STATE_CHANGED")
 
 # topic for events from pomos.py
 pomo_topic = Topic()
+# pomodoro stuff
 pomo_topic.create_event("TIMER_COMPLETED")
 pomo_topic.create_event("TIMER_ITERATED")
 pomo_topic.create_event("ROUND_COMPLETED")
@@ -149,3 +153,5 @@ pomo_topic.create_event("TIMER_PAUSED")
 pomo_topic.create_event("FOCUS_PERIOD_STARTED")
 pomo_topic.create_event("FOCUS_PERIOD_CANCELLED")
 pomo_topic.create_event("FOCUS_PERIOD_COMPLETED")
+# decrementing stat stuff
+pomo_topic.create_event("TICK_TIMER_ITERATED")

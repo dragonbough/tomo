@@ -167,6 +167,7 @@ class TodoViewItem(QTreeWidgetItem):
             parent_todo = self.todo_view.get_item_todo(parent) if parent else None
             my_todo = self.todo_view.todo_list.create_todo(name=new_text, parent=parent_todo, difficulty=new_difficulty)
             self.item_id = my_todo.todo_id
+            self.todo_view.make_new_todo_current(self)
 
     # shows the button used to add todo items
     def toggle_item_buttons(self, toggle : bool):
@@ -236,8 +237,18 @@ class TodoView(QTreeWidget):
 
         self.resize_self()
 
+    # deselects the current item and sets a new one -- used by newly created todos that had their edit completed
+    def make_new_todo_current(self, new_current_item : TodoViewItem):
+        self.clearSelection()
+        self.setCurrentItem(None)
+        self.setCurrentItem(new_current_item)
+
     # focusses the todo item whenever a focus period starts -- no editing can be made until the todo is completed or the focus period is cancelled
     def focus_todo_item(self):
+        if self.editing_item:
+            self.toggle_edit(self.editing_item)
+            # this ensures that the focus period timer updates if the currently editing item is the currentItem()
+            self.broadcast_todo_selection(self.currentItem())
         self.focussed_item : TodoViewItem = self.currentItem()
         self.focussed_item.setExpanded(True)
         self.add_button_item.setHidden(True)
@@ -400,6 +411,8 @@ class TodoView(QTreeWidget):
     def mousePressEvent(self, e):
         self.clearSelection()
         self.setCurrentItem(None)
+        if self.itemAt(e.pos()) != self.editing_item:
+            self.toggle_edit(self.editing_item)
         return super().mousePressEvent(e)
 
     # creates an empty todoviewitem under a provided parent, which turns into an empty, editable item

@@ -1,5 +1,6 @@
 from threading import (Timer, Event)
 from . import events, data
+from datetime import datetime
 
 # right2clicky on StackOverflow --https://stackoverflow.com/a/48741004
 # Timer that iterates before executing function -- has its own thread
@@ -16,6 +17,33 @@ class IteratingTimer(Timer):
         while not self.finished.wait(self.interval):
             if not self.paused.is_set():
                 self.function(*self.args)
+
+
+# timer with IteratingTimer object, keeps track of date time object and ensures that tomo xp/hp is decremented at certain rate
+class TickTimer():
+
+    def __init__(self, interval : int = 30):
+
+        self.timer = IteratingTimer(interval=interval, function=self.tick_timer)
+        self.update_timestamp()
+
+    # updates timer and calls TICK_TIMER_ITERATED event
+    def tick_timer(self):
+        self.update_timestamp()
+        events.pomo_topic.get_event("TICK_TIMER_ITERATED").trigger(self.timestamp)
+
+    # updates the timestamp to the current time
+    def update_timestamp(self):
+        self.timestamp = datetime.now().timestamp()
+
+    # this should happen when the app is initialised
+    def start_timer(self):
+        self.timer.start()
+
+    # only call this when the application is to close
+    def kill_timer(self):
+        self.timer.finished.set()
+        self.timer.cancel()
 
 # individual timer with its own IteratingTimer object
 class BaseTimer():
@@ -243,6 +271,9 @@ def PomodoroTimer(difficulty : int = 1) -> _PomodoroTimer:
         _pomodoro_timer_singleton = _PomodoroTimer(difficulty=difficulty)
 
     return _pomodoro_timer_singleton
+
+tick_timer = TickTimer()
+tick_timer.start_timer()
 
 
 if __name__ == "__main__":
