@@ -42,6 +42,8 @@ class MainView(QMainWindow):
         self.todo_view.set_min_height(self.tomo_view.height())
         self.todo_view.set_max_height(self.tomo_view.height())
         self.pomo_view.setFixedHeight(self.tomo_view.height())
+        self.pomo_view.set_max_width(150)
+        self.pomo_view.adjustSize()
 
         self.setFixedSize(self.sizeHint())
 
