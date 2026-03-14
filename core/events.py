@@ -83,7 +83,7 @@ class Topic():
             event_list = []
             for event_name in event_names:
                 if event_name not in self.events:
-                    raise NameError(f"Event name: {event_name} not found in events")
+                    raise NameError(f"Event name: {event_name} not found in topic")
                 else:
                     event_list.append(self.events[event_name])
             return event_list
@@ -137,6 +137,7 @@ tomo_topic.create_event("XP_INCREASED")
 tomo_topic.create_event("LVL_INCREASED")
 tomo_topic.create_event("XP_DECREASED")
 tomo_topic.create_event("LVL_DECREASED")
+tomo_topic.create_event("HP_INCREASED")
 tomo_topic.create_event("HP_DECREASED")
 
 # triggers when a state in a tomo fsm is changed -- allows other things to respond to its events

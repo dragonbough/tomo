@@ -1,6 +1,6 @@
 from core import tomos, events
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QProgressBar, QTabWidget, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QLabel, QScrollArea, QPushButton, QSizePolicy, QFrame, QStyleFactory)
 from PyQt6.QtGui import QPixmap, QColor, QImage, QIcon
 
@@ -38,8 +38,8 @@ class TomoViewManager(QWidget):
         self.stat_view = TomoStatView(self)
         self.tab_widget.addTab(self.stat_view, f"{self.tomos.current_tomo.name}")
 
-        # on completion of either the XP_INCREASED or LVL_INCREASED events in the tomo topic, the stat view is updated
-        for event in events.tomo_topic.get_events("XP_INCREASED", "LVL_INCREASED"):
+        # on completion of any stat change events in the tomo topic, the stat view is updated
+        for event in events.tomo_topic.get_events("XP_INCREASED", "XP_DECREASED", "LVL_INCREASED", "LVL_DECREASED", "HP_INCREASED", "HP_DECREASED"):
             event.register(self.stat_update_event)
 
         self.list_view = TomoListView(self, self.tomos.get_tomos())
@@ -78,8 +78,11 @@ class TomoViewManager(QWidget):
 
     # updates the tomo stats on occurence of either of the stat_update_events
     def stat_update_event(self, tomo : tomos.Tomo):
-        self.stat_view.update_stats(tomo.get_base_stats(), tomo.hp, tomo.xp, tomo.bond_level, tomo.get_max_level())
-        self.sprite_view.update_sprite(tomo.get_base_stats()["sprite_path"])
+        if tomo != self.tomos.current_tomo:
+            return
+        # hp : int, base_hp: int, xp : int, max_xp : int, bond_lvl : int, max_bond_lvl : int
+        self.stat_view.stat_update_signal.emit(tomo.hp, tomo.get_base_hp(), tomo.xp, tomo.get_max_xp(), tomo.bond_level, tomo.get_max_level())
+        self.sprite_view.sprite_update_signal.emit(tomo.get_base_stats()["sprite_path"])
 
     # behaviours that occur on the change of a state in the fsm
     def tomo_state_change_event(self, tomo : tomos.Tomo):
@@ -105,6 +108,8 @@ class TomoViewManager(QWidget):
 # displays sprites in the scene according to the TomoSpriteConstructor (self.painter)
 class TomoSpriteView(QGraphicsView):
 
+    sprite_update_signal = pyqtSignal(str)
+
     def __init__(self, manager : TomoViewManager):
         super().__init__()
 
@@ -119,6 +124,8 @@ class TomoSpriteView(QGraphicsView):
 
         rect = self.rect()
         self.painter = TomoSpriteConstructor(rect.x(), rect.y(), rect.width(), rect.height())
+
+        self.sprite_update_signal.connect(self.update_sprite)
 
     def display_view(self):
         self.setScene(self.painter)
@@ -255,6 +262,8 @@ class ResponseIcon(TomoSprite):
 # overviews the stats of the currently selected Tomo
 class TomoStatView(QWidget):
 
+    stat_update_signal = pyqtSignal(int, int, int, int, int, int)
+
     def __init__(self, manager : TomoViewManager):
         super().__init__()
 
@@ -262,43 +271,49 @@ class TomoStatView(QWidget):
 
         self.stat_layout = QVBoxLayout()
         self.setLayout(self.stat_layout)
-        self.stat_layout.setSpacing(0)
-        self.setContentsMargins(11, 0, 11, 0)
-
-        self.bond_level = QProgressBar()
-        self.bond_level.setFormat("BOND LVL: %v")
-        self.bond_level.setMinimum(1)
-        self.bond_level.setStyle(QStyleFactory.create("Fusion"))
-
-        self.stat_layout.addWidget(self.bond_level)
-
-        self.bottom_stats = QWidget()
-        self.bottom_stats_layout = QHBoxLayout()
-        self.bottom_stats.setLayout(self.bottom_stats_layout)
 
         self.hp_bar = QProgressBar()
         self.hp_bar.setFormat("HP: %v/%m")
         self.hp_bar.setMinimum(0)
-        self.bottom_stats_layout.addWidget(self.hp_bar)
+        self.hp_bar.setStyle(QStyleFactory.create("Fusion"))
+        self.stat_layout.addWidget(self.hp_bar)
+
+        self.bond_lvl_bar = QWidget()
+        self.bond_lvl_bar_layout = QHBoxLayout()
+        self.bond_lvl_bar.setLayout(self.bond_lvl_bar_layout)
+
+        self.current_lvl = QLabel()
+        self.next_lvl = QLabel()
 
         self.xp_bar = QProgressBar()
-        self.xp_bar.setFormat("XP: %v/%m")
+        self.xp_bar.setFormat("%vXP")
         self.xp_bar.setMinimum(0)
-        self.bottom_stats_layout.addWidget(self.xp_bar)
+        self.xp_bar.setStyle(QStyleFactory.create("Fusion"))
 
-        self.stat_layout.addWidget(self.bottom_stats)
+        self.bond_lvl_bar_layout.addWidget(self.current_lvl)
+        self.bond_lvl_bar_layout.addWidget(self.xp_bar)
+        self.bond_lvl_bar_layout.addWidget(self.next_lvl)
+
+        self.stat_layout.addWidget(self.bond_lvl_bar)
+
+        self.stat_update_signal.connect(self.update_stats)
 
     # updates the each tomo stat in the view
-    def update_stats(self, base_stats : dict, hp : int, xp : int, bond_lvl : int, max_bond_lvl : int):
+    def update_stats(self, hp : int, base_hp: int, xp : int, max_xp : int, bond_lvl : int, max_bond_lvl : int):
 
-        self.bond_level.setMaximum(max_bond_lvl)
-        self.bond_level.setValue(bond_lvl)
-
-        self.hp_bar.setMaximum(base_stats["hp"])
-        self.hp_bar.setValue(hp)
-
-        self.xp_bar.setMaximum(base_stats["required_xp"])
+        self.xp_bar.setMaximum(max_xp)
         self.xp_bar.setValue(xp)
+
+        self.current_lvl.setText(f"<b>{bond_lvl}</b>")
+        self.current_lvl.adjustSize()
+        if bond_lvl == max_bond_lvl:
+            next_lvl = "-"
+        else:
+            next_lvl = bond_lvl + 1
+        self.next_lvl.setText(f"<b>{next_lvl}")
+
+        self.hp_bar.setMaximum(base_hp)
+        self.hp_bar.setValue(hp)
 
 # overviews all of the non-selected Tomos that the user owns
 class TomoListView(QWidget):

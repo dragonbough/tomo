@@ -174,27 +174,27 @@ class BaseTomo():
         self.levels = levels
 
     # returns the highest level for the given xp
-    def check_for_level(self, xp : int):
+    def get_level(self, xp : int):
         # must be done in order to work -- sorting self.levels by key (level)
         tomo_levels = dict(sorted(self.levels.items(), key=lambda item: item[0]))
 
-        # returns max level of tomo when max passed as parameter
-        if type(xp) == str and xp == "max":
-            return max(self.levels)
-
+        new_level = 1
         for level in tomo_levels:
-            current_level = level
-            if self.get_level_stats(level)["required_xp"] > xp:
-                return current_level
-        return current_level
+            required_xp = self.get_level_stats(level)["required_xp"]
+            if xp >= required_xp:
+                new_level = level
+
+        return new_level
 
     # returns dictionary of stats for given level
     def get_level_stats(self, level : int) -> dict[str]:
+        if level not in self.levels:
+            raise IndexError(f"Invalid bond level provided: {level}")
         return self.levels[level]
 
     # returns the max level of the tomo
     def get_max_level(self):
-        return self.check_for_level("max")
+        return max(self.levels)
 
 #tomo is an agent that relies on a finite state machine for its behaviours
 class Tomo():
@@ -218,10 +218,14 @@ class Tomo():
         self.fsm = StateMachine(str(folder_path / "main_fsm"), start_state=last_behaviour)
         self.check_for_fsm_input()
 
-    # decrements the tomo's xp / hp over time / recovers hp, depending on factors
-    def tick_stats(timestamp : float):
-        # TO BE IMPLEMENTED NEXT
-        pass
+    # decrements the tomo's xp / hp over time / recovers hp
+    def tick_stats(self, timestamp : float):
+        # if the tomo has xp, increase the hp by 1 (recovering), and decrement the xp
+        if self.xp > 0:
+            self.change_stat(xp=-1, hp=1)
+        # if the tomo doesn't have xp, decrease the hp while there is any
+        elif self.hp > 0:
+            self.change_stat(hp=-1)
 
     # checks for transition, and if so, triggered STATE_CHANGED event -- also handles incorrect inputs without crashing program
     def tick_fsm(self, input : str = None):
@@ -234,7 +238,11 @@ class Tomo():
                 self.fsm.current_state.execute(self.fsm.current_state.name)
 
     # checks for whether any requirements have been met to pass in a certain input into the finite state machine
-    def check_for_fsm_input(self):
+    def check_for_fsm_input(self, tomo : Tomo = None):
+
+        # each tomo_topic event will pass the tomo as argument. if this tomo is not us, we shouldn't be affected
+        if tomo != self:
+            return
 
         fsm_input = None
         event_stream = events.tomo_topic.get_stream()
@@ -259,8 +267,7 @@ class Tomo():
             fsm_input = "lvl_increased"
 
         # if hp falls below a certain threshold then tick fsm with input hp_low
-        max_hp = self.get_base_stats()["hp"]
-        if (self.hp / max_hp) < 0.5:
+        if (self.hp / self.get_base_hp()) < 0.5:
             fsm_input = "low_hp"
 
         # if hp and xp are 0 then tick fsm with input fully_depleted
@@ -271,18 +278,21 @@ class Tomo():
 
     # checks for a level up / level down -- if its possible then level up / down
     # otherwise, returns False
-    def check_for_level(self):
-        new_level = self.base_tomo.check_for_level(self.xp)
-        # if the tomo has reached max level, its xp cannot surpass the xp at this level
-        if new_level == self.get_max_level():
-            self.xp = min(self.xp, self.get_max_stats()["required_xp"])
+    def update_level(self):
+        new_level = self.base_tomo.get_level(self.xp)
+
         if new_level != self.bond_level:
+
+            old_bond_level = self.bond_level
             self.bond_level = new_level
             new_stats = self.get_base_stats()
             self.set_stat(hp=new_stats["hp"])
 
-            # triggers level increased event
-            events.tomo_topic.get_event("LVL_INCREASED").trigger(self)
+            # triggers level increased/decreased event
+            if new_level > old_bond_level:
+                events.tomo_topic.get_event("LVL_INCREASED").trigger(self)
+            elif new_level < old_bond_level:
+                events.tomo_topic.get_event("LVL_DECREASED").trigger(self)
 
             print(f"TOMO SYSTEM: {self.name}'s BOND LVL changed to {self.bond_level}")
         else:
@@ -297,24 +307,40 @@ class Tomo():
     def get_max_level(self):
         return self.base_tomo.get_max_level()
 
-    # returns the max possible stats for the tomo
-    def get_max_stats(self):
-        return self.get_base_stats(self.get_max_level())
+    def get_base_hp(self, level : int = None) -> int:
+        return self.get_base_stats(level if level else self.bond_level)["hp"]
 
-    # increases xp/hp by certain amount
-    def increase_stat(self, hp : int = None, xp : int = None):
+    # gets the xp needed to level up from this level -- the next level's required xp
+    def get_max_xp(self, level : int = None)  -> int:
+        try:
+            max_xp = self.get_base_stats(level if level else self.bond_level + 1)["required_xp"]
+            return max_xp
+        # for now if there are no more levels just allow for more xp in that level
+        except IndexError:
+            return self.xp
+
+    # changes xp/hp by certain amount
+    def change_stat(self, hp : int = None, xp : int = None):
         if hp:
             if type(hp) != int:
-                raise TypeError("Invalid HP increase value")
-            self.hp += hp
-            print(f"TOMO SYSTEM: {self.name}'s HP increased by {hp}!")
+                raise TypeError("Invalid value for HP change")
+            # hp cannot surpass its base hp
+            self.hp = min(self.hp + hp, self.get_base_hp())
+            print(f"TOMO SYSTEM: {self.name}'s HP {"increased" if hp > 0 else "decreased"} by {abs(hp)}!")
+            if hp > 0:
+                events.tomo_topic.get_event("HP_INCREASED").trigger(self)
+            elif hp < 0:
+                events.tomo_topic.get_event("HP_DECREASED").trigger(self)
         if xp:
             if type(xp) != int:
                 raise TypeError("Invalid XP increase value")
             self.xp += xp
-            print(f"TOMO SYSTEM: {self.name}'s XP increased by {xp}!")
-            events.tomo_topic.get_event("XP_INCREASED").trigger(self)
-            self.check_for_level()
+            print(f"TOMO SYSTEM: {self.name}'s XP {"increased" if xp > 0 else "decreased"} by {abs(xp)}!")
+            if xp > 0:
+                events.tomo_topic.get_event("XP_INCREASED").trigger(self)
+            elif xp < 0:
+                events.tomo_topic.get_event("XP_DECREASED").trigger(self)
+            self.update_level()
         self.updated = True
 
     # sets xp/xp to a specific amount
@@ -422,7 +448,7 @@ class UserTomos():
             else:
                 xp_increase = 5
 
-            self.current_tomo.increase_stat(xp=xp_increase)
+            self.current_tomo.change_stat(xp=xp_increase)
         else:
             print("No tomo selected")
 
@@ -489,9 +515,7 @@ if __name__ == "__main__":
 
             print(f"BOND LVL: {tomo.bond_level} ({tomo.xp} XP)")
 
-            base_stats = tomo.get_base_stats()
-
-            base_hp = base_stats["hp"]
+            base_hp = tomo.get_base_hp()
 
             max_bar_length = 10
             bar_length = int(tomo.hp / base_hp * max_bar_length)
@@ -537,7 +561,7 @@ if __name__ == "__main__":
                 if choice == 1:
                     current_tomo.rename(input("Enter name: "))
                 elif choice == 2:
-                    current_tomo.increase_stat(xp=int(input("How much XP?")))
+                    current_tomo.change_stat(xp=int(input("How much XP?")))
                 elif choice == 3:
                     user_tomos.deselect_tomo()
 

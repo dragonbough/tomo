@@ -33,10 +33,12 @@ if not db_path.is_file():
 
     # creates the TomoLevelingStats table and populates with data
     cursor.executescript("""CREATE TABLE TomoLevelingStats(TomoID INTEGER NOT NULL, BondLevel INTEGER NOT NULL, RequiredXP INTEGER NOT NULL, SpritePath BLOB, HP INTEGER NOT NULL, FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
-                         INSERT INTO TomoLevelingStats VALUES(1,2,300,'sprites/pebble2.png',150);
-                         INSERT INTO TomoLevelingStats VALUES(1,1,100,'sprites/pebble.png',100);
-                         INSERT INTO TomoLevelingStats VALUES(2,1,300,'sprites/plant.png',300);
-                         INSERT INTO TomoLevelingStats VALUES(2,2,500,'sprites/plant2.png',400);""")
+                        INSERT INTO TomoLevelingStats VALUES(1,2,100,'sprites/pebble2.png',150);
+                        INSERT INTO TomoLevelingStats VALUES(2,2,300,'sprites/plant2.png',400);
+                        INSERT INTO TomoLevelingStats VALUES(2,3,500,'sprites/plant3.png',500);
+                        INSERT INTO TomoLevelingStats VALUES(1,3,300,'sprites/pebble2.png',300);
+                        INSERT INTO TomoLevelingStats VALUES(1,1,0,'sprites/pebble.png',100);
+                        INSERT INTO TomoLevelingStats VALUES(2,1,0,'sprites/plant.png',300);""")
 
     # creates UserTomo table
     cursor.execute("""CREATE TABLE UserTomo(TomoID INTEGER PRIMARY KEY, Name VARCHAR(45) NOT NULL, HP INTEGER NOT NULL, XP INTEGER NOT NULL, BondLevel INTEGER NOT NULL, LastBehaviour VARCHAR,

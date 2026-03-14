@@ -272,7 +272,7 @@ def PomodoroTimer(difficulty : int = 1) -> _PomodoroTimer:
 
     return _pomodoro_timer_singleton
 
-tick_timer = TickTimer()
+tick_timer = TickTimer(60)
 tick_timer.start_timer()
 
 
