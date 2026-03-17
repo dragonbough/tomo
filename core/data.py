@@ -42,7 +42,9 @@ if not db_path.is_file():
 
     # creates UserTomo table
     cursor.execute("""CREATE TABLE UserTomo(TomoID INTEGER PRIMARY KEY, Name VARCHAR(45) NOT NULL, HP INTEGER NOT NULL, XP INTEGER NOT NULL, BondLevel INTEGER NOT NULL, LastBehaviour VARCHAR,
-                   FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));""")
+                   FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
+                   INSERT INTO UserTomo VALUES(1,'RockFriend',100,0,1,'idle');
+                   INSERT INTO UserTomo VALUES(2,'TomaTomo',300,0,1,'idle');""")
 
 
     connection.commit()
