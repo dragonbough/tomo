@@ -8,6 +8,8 @@ db_path = BASE_DIR / "tomo_data.db"
 if not db_path.is_file():
 
     connection = sqlite3.connect(db_path)
+    #rows are returned as indexed dictionary instead of tuples
+    connection.row_factory = sqlite3.Row
     cursor = connection.cursor()
 
     #write-ahead logging -- increased performance benefit but won't work on network filesystems or read only DBs
