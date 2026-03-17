@@ -7,7 +7,7 @@ db_path = BASE_DIR / "tomo_data.db"
 
 if not db_path.is_file():
 
-    connection = sqlite3.connect("tomo_data.db")
+    connection = sqlite3.connect(db_path)
     cursor = connection.cursor()
 
     #write-ahead logging -- increased performance benefit but won't work on network filesystems or read only DBs
