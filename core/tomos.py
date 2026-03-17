@@ -227,6 +227,7 @@ class Tomo():
         elif self.hp > 0:
             self.change_stat(hp=-1)
 
+
     # checks for transition, and if so, triggered STATE_CHANGED event -- also handles incorrect inputs without crashing program
     def tick_fsm(self, input : str = None):
         if input:
@@ -262,9 +263,28 @@ class Tomo():
             if xp_increase_count <= 0:
                 fsm_input = "high_xp_events"
 
+        # if the tomo has full hp then tick fsm with tomo_normal
+        if self.hp == self.get_base_hp():
+            fsm_input = "tomo_normal"
+
+        # if the xp has decreased tick fsm with input xp_decreased
+        if latest_event_name == "XP_DECREASED":
+            fsm_input = "xp_decreased"
+
+        if latest_event_name == "HP_INCREASED":
+            fsm_input = "hp_increased"
+
         # if level is increased then tick fsm with input lvl_incresaed
         if latest_event_name == "LVL_INCREASED":
             fsm_input = "lvl_increased"
+
+        # if level is decreased then tick fsm with input lvl_decreased
+        if latest_event_name == "LVL_DECREASED":
+            fsm_input = "lvl_decreased"
+
+        # if the hp is decreasing then tick fsm with "hp_decreased input"
+        if latest_event_name == "HP_DECREASED":
+            fsm_input = "hp_decreased"
 
         # if hp falls below a certain threshold then tick fsm with input hp_low
         if (self.hp / self.get_base_hp()) < 0.5:

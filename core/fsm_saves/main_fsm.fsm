@@ -3,29 +3,20 @@
   <key id="d0" for="edge" attr.name="name" attr.type="string" />
   <graph edgedefault="directed">
     <node id="idle" />
-    <node id="lonely" />
     <node id="happy" />
-    <node id="proud" />
-    <node id="playful" />
+    <node id="lonely" />
     <node id="tired" />
     <node id="relieved" />
+    <node id="proud" />
+    <node id="playful" />
     <node id="exhausted" />
     <node id="weary" />
-    <node id="unconcious" />
-    <edge source="idle" target="lonely">
-      <data key="d0">hp_decreased</data>
-    </edge>
+    <node id="unconscious" />
     <edge source="idle" target="happy">
       <data key="d0">xp_increased</data>
     </edge>
-    <edge source="lonely" target="tired">
-      <data key="d0">low_hp</data>
-    </edge>
-    <edge source="lonely" target="relieved">
-      <data key="d0">hp_recovering</data>
-    </edge>
-    <edge source="happy" target="lonely">
-      <data key="d0">hp_decreased</data>
+    <edge source="idle" target="lonely">
+      <data key="d0">xp_decreased</data>
     </edge>
     <edge source="happy" target="proud">
       <data key="d0">lvl_increased</data>
@@ -33,23 +24,20 @@
     <edge source="happy" target="playful">
       <data key="d0">high_xp_events</data>
     </edge>
-    <edge source="proud" target="lonely">
-      <data key="d0">hp_decreased</data>
+    <edge source="happy" target="lonely">
+      <data key="d0">xp_decreased</data>
     </edge>
-    <edge source="proud" target="playful">
-      <data key="d0">high_xp_events</data>
+    <edge source="lonely" target="tired">
+      <data key="d0">lvl_decreased</data>
     </edge>
-    <edge source="playful" target="proud">
-      <data key="d0">lvl_increased</data>
+    <edge source="lonely" target="relieved">
+      <data key="d0">xp_increased</data>
     </edge>
-    <edge source="playful" target="lonely">
+    <edge source="tired" target="exhausted">
       <data key="d0">hp_decreased</data>
     </edge>
     <edge source="tired" target="relieved">
-      <data key="d0">hp_recovering</data>
-    </edge>
-    <edge source="tired" target="exhausted">
-      <data key="d0">xp_decreased</data>
+      <data key="d0">xp_increased</data>
     </edge>
     <edge source="relieved" target="idle">
       <data key="d0">tomo_normal</data>
@@ -57,20 +45,32 @@
     <edge source="relieved" target="tired">
       <data key="d0">low_xp</data>
     </edge>
-    <edge source="exhausted" target="relieved">
-      <data key="d0">hp_recovering</data>
+    <edge source="proud" target="playful">
+      <data key="d0">high_xp_events</data>
+    </edge>
+    <edge source="proud" target="lonely">
+      <data key="d0">xp_decreased</data>
+    </edge>
+    <edge source="playful" target="proud">
+      <data key="d0">lvl_increased</data>
+    </edge>
+    <edge source="playful" target="lonely">
+      <data key="d0">xp_decreased</data>
     </edge>
     <edge source="exhausted" target="weary">
-      <data key="d0">lvl_decreased</data>
+      <data key="d0">low_hp</data>
     </edge>
-    <edge source="weary" target="relieved">
-      <data key="d0">hp_recovering</data>
+    <edge source="exhausted" target="relieved">
+      <data key="d0">hp_increased</data>
     </edge>
-    <edge source="weary" target="unconcious">
+    <edge source="weary" target="unconscious">
       <data key="d0">fully_depleted</data>
     </edge>
-    <edge source="unconcious" target="relieved">
-      <data key="d0">hp_recovering</data>
+    <edge source="weary" target="relieved">
+      <data key="d0">hp_increased</data>
+    </edge>
+    <edge source="unconscious" target="relieved">
+      <data key="d0">hp_increased</data>
     </edge>
   </graph>
 </graphml>

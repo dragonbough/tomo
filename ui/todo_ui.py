@@ -233,6 +233,7 @@ class TodoView(QTreeWidget):
         self.setMouseTracking(True)
         self.current_hover_item : TodoViewItem = None
 
+        # creates the add button item for adding new todos
         self.init_add_button_item(refresh=False)
 
         self.resize_self()
@@ -245,6 +246,7 @@ class TodoView(QTreeWidget):
 
     # focusses the todo item whenever a focus period starts -- no editing can be made until the todo is completed or the focus period is cancelled
     def focus_todo_item(self):
+
         if self.editing_item:
             self.toggle_edit(self.editing_item)
             # this ensures that the focus period timer updates if the currently editing item is the currentItem()
@@ -252,12 +254,23 @@ class TodoView(QTreeWidget):
         self.focussed_item : TodoViewItem = self.currentItem()
         self.focussed_item.setExpanded(True)
         self.add_button_item.setHidden(True)
+
+        focussed_item_parents = []
+        parent = self.focussed_item.parent()
+        while type(parent) == TodoViewItem:
+            focussed_item_parents.append(parent)
+            parent = parent.parent()
+
+        # all the children of the focussed item
+        focussed_item_children = self.todo_list.depth_first_search(node=self.get_item_todo(self.focussed_item), visited=[], depth=0, node_depths={})
+
+        # all items that are not the focussed item or its children are disabled and have no children (except for focussed item's parents, still has children)
         for item in self.items:
-            if item != self.focussed_item:
+            if item != self.focussed_item and self.get_item_todo(item) not in focussed_item_children:
+                item.item_checkbox.setEnabled(False)
                 item.setDisabled(True)
-                item.setFlags(item.flags() | Qt.ItemFlag.ItemNeverHasChildren)
-                if item.parent() != self.focussed_item:
-                    item.item_checkbox.setEnabled(False)
+                if item not in focussed_item_parents:
+                    item.setFlags(item.flags() | Qt.ItemFlag.ItemNeverHasChildren)
             item.toggle_item_buttons(False)
 
     # cancels the focus period stuff
@@ -275,7 +288,7 @@ class TodoView(QTreeWidget):
     # used to tell the pomodoro ui the difficulty of the currently selected todo
     def broadcast_todo_selection(self, current_item : TodoViewItem):
         todo_difficulty = -1
-        if current_item and current_item.item_id and not self.focussed_item and self.get_item_todo(current_item).completed == False:
+        if current_item and type(current_item) == TodoViewItem and current_item.item_id and not self.focussed_item and self.get_item_todo(current_item).completed == False:
             todo_difficulty = self.todo_list.get_todo(current_item.item_id).difficulty
         events.todo_topic.get_event("TODO_SELECTED").trigger(todo_difficulty)
 
@@ -468,6 +481,7 @@ class TodoView(QTreeWidget):
             self.todo_list.delete_todo(self.get_item_todo(item))
         for item in self.get_deleted_items():
             self.delete_item(item)
+        self.init_add_button_item(True)
 
     def delete_item(self, item : TodoViewItem):
         if item not in self.items:

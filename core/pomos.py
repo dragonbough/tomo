@@ -18,39 +18,12 @@ class IteratingTimer(Timer):
             if not self.paused.is_set():
                 self.function(*self.args)
 
-
-# timer with IteratingTimer object, keeps track of date time object and ensures that tomo xp/hp is decremented at certain rate
-class TickTimer():
-
-    def __init__(self, interval : int = 30):
-
-        self.timer = IteratingTimer(interval=interval, function=self.tick_timer)
-        self.update_timestamp()
-
-    # updates timer and calls TICK_TIMER_ITERATED event
-    def tick_timer(self):
-        self.update_timestamp()
-        events.pomo_topic.get_event("TICK_TIMER_ITERATED").trigger(self.timestamp)
-
-    # updates the timestamp to the current time
-    def update_timestamp(self):
-        self.timestamp = datetime.now().timestamp()
-
-    # this should happen when the app is initialised
-    def start_timer(self):
-        self.timer.start()
-
-    # only call this when the application is to close
-    def kill_timer(self):
-        self.timer.finished.set()
-        self.timer.cancel()
-
 # individual timer with its own IteratingTimer object
 class BaseTimer():
 
-    def __init__(self, duration : int):
+    def __init__(self, duration : int, interval : int = 1):
         self.duration = duration
-        self.reset_timer()
+        self.reset_timer(interval=interval)
 
     # function used by IteratingTimer class to iterate timer
     def iterate_timer(self):
@@ -91,8 +64,8 @@ class BaseTimer():
         self.paused = True
 
     # creates a new timer thread to replace prev one, and resets elapsed time, finished status and paused status
-    def reset_timer(self):
-        self.iterating_timer = IteratingTimer(interval=1, function=self.iterate_timer)
+    def reset_timer(self, interval : int = 1):
+        self.iterating_timer = IteratingTimer(interval=interval, function=self.iterate_timer)
         self.elapsed = -1
         self.finished = False
         self.pause_timer()
@@ -104,6 +77,28 @@ class BaseTimer():
     # kills the timer
     def kill(self):
         self.iterating_timer.cancel()
+
+# timer with IteratingTimer object, keeps track of date time object and ensures that tomo xp/hp is decremented at certain rate
+class TickTimer(BaseTimer):
+
+    def __init__(self, interval : int = 30):
+
+        super().__init__(duration=None, interval=interval)
+        self.update_timestamp()
+
+    # updates timer and calls TICK_TIMER_ITERATED event
+    def iterate_timer(self):
+        self.update_timestamp()
+        events.pomo_topic.get_event("TICK_TIMER_ITERATED").trigger(self.timestamp)
+
+    # updates the timestamp to the current time
+    def update_timestamp(self):
+        self.timestamp = datetime.now().timestamp()
+
+    # i dont need finishing timer functionality
+    def finish_timer(self):
+        pass
+
 
 # singleton object (you can only have 1 at a time) -- singleton implementation from Christian Meyer -- https://code.activestate.com/recipes/52558/#c7
 # object consisting of two timers -- current timer is dependent on pomodoro focus mode

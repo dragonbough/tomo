@@ -159,7 +159,10 @@ class TomoSpriteConstructor(QGraphicsScene):
         response_icon_pos = 200 - response_icon_size[0], 0
 
         self.response_icons = {"idle" : ResponseIcon("idle", "grey", response_icon_size), "happy": ResponseIcon("happy", "green", response_icon_size), "playful" : ResponseIcon("playful", "pink", response_icon_size),
-                               "proud" : ResponseIcon("proud", "yellow", response_icon_size), "relieved" : ResponseIcon("relieved", "orange", response_icon_size), "tired" : ResponseIcon("tired", "blue", response_icon_size)}
+                               "proud" : ResponseIcon("proud", "yellow", response_icon_size), "relieved" : ResponseIcon("relieved", "orange", response_icon_size), "lonely" : ResponseIcon("lonely", "lightblue", response_icon_size),
+                               "tired" : ResponseIcon("tired", "blue", response_icon_size), "exhausted" : ResponseIcon("exhausted", "purple", response_icon_size), "weary" : ResponseIcon("weary", "indigo", response_icon_size),
+                               "unconscious" : ResponseIcon("unconscious", "red", response_icon_size)}
+
         for icon in self.response_icons.values():
             icon.setPos(*response_icon_pos)
             self.addItem(icon)

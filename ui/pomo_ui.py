@@ -11,6 +11,8 @@ class PomoView(QWidget):
     def get_pomo_view():
         return PomoView()
 
+    update_buttons_signal = pyqtSignal()
+
     def __init__(self):
         super().__init__()
 
@@ -102,7 +104,9 @@ class PomoView(QWidget):
         self.play_button.setIconSize(self.idle_view_widget.sizeHint())
         self.play_button.setFixedSize(self.idle_view_widget.sizeHint())
 
-        self.update_timer_buttons()
+        # signal used to update the timer buttons in a thread safe way
+        self.update_buttons_signal.connect(self.update_timer_buttons)
+        self.update_buttons_signal.emit()
 
         self.timer_toggle_button.setIconSize(self.reset_timer_button.iconSize())
         self.timer_toggle_button.setFixedSize(self.reset_timer_button.sizeHint())
@@ -137,6 +141,8 @@ class PomoView(QWidget):
     # starts the display of the pomodoro timer
     def start_timer_view(self, difficulty : int):
         events.pomo_topic.get_event("FOCUS_PERIOD_STARTED").trigger()
+        # while in a focus period, tomo hp/xp is not decremented
+        pomos.tick_timer.pause_timer()
         durations = self.pomo_timer.get_split(difficulty)
         self.stacked_layout.setCurrentWidget(self.timer_view_widget)
         self.timer_view.start_view(durations=durations, focus_mode=True)
@@ -146,8 +152,8 @@ class PomoView(QWidget):
     # updates timer view (whenever the timer is completed)
     def update_timer_view(self):
         self.update_rounds(self.pomo_timer.rounds)
-        self.timer_view.update_view(self.pomo_timer.focus_mode)
-        self.update_timer_buttons()
+        self.timer_view.update_view_signal.emit(self.pomo_timer.focus_mode)
+        self.update_buttons_signal.emit()
 
     # starts the pomodoro timer
     def toggle_pomo_timer(self):
@@ -165,6 +171,8 @@ class PomoView(QWidget):
     # cancels the focus period, no xp rewarded
     def cancel_pomo_timer(self):
         self.pomo_timer.kill_timer()
+        # resumes progress of decrement timer when focus period is ended
+        pomos.tick_timer.start_timer()
         events.pomo_topic.get_event("FOCUS_PERIOD_CANCELLED").trigger()
         self.stacked_layout.setCurrentWidget(self.idle_view_widget)
 
@@ -186,6 +194,9 @@ class PomoView(QWidget):
 
     # shows stats about the completion of a focus period
     def show_focus_stats(self):
+        # resumes progress of the decrement timer when the focus period is done
+        if pomos.tick_timer.is_running() == False:
+            pomos.tick_timer.start_timer()
         # if its not in the focus period screen before this is called dont bother
         if self.stacked_layout.currentWidget() != self.timer_view_widget:
             return
@@ -202,14 +213,17 @@ class PomoView(QWidget):
     # what happens when the window is closed
     def quit_proc(self):
         self.pomo_timer.kill_timer()
-        pomos.tick_timer.kill_timer()
+        pomos.tick_timer.kill()
 
 # progress bar that ticks with the pomodoro timer
 class PomoTimerView(QProgressBar):
 
-    # signals allow for updates of the main thread's Qobjects from another thread
+    # signals allow for updates of the main thread's Qobjects from another thread:
+
     # signal used to set the elapsed time of the pomodoro timer
     elapse_signal = pyqtSignal(int)
+    # signal used to update the view on completion of pomodoro timer
+    update_view_signal = pyqtSignal(bool)
 
     # this is only initialised to ensure everything is already there
     def __init__(self):
@@ -224,6 +238,7 @@ class PomoTimerView(QProgressBar):
         self.setMinimumWidth(50)
 
         self.elapse_signal.connect(self.set_elapsed)
+        self.update_view_signal.connect(self.update_view)
 
     # creates the timer
     def start_view(self, durations : tuple[int, int], focus_mode : bool, elapsed : int = 0):
