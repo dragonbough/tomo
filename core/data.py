@@ -40,8 +40,8 @@ if not db_path.is_file():
                         INSERT INTO TomoLevelingStats VALUES(1,1,0,'sprites/pebble.png',100);
                         INSERT INTO TomoLevelingStats VALUES(2,1,0,'sprites/plant.png',300);""")
 
-    # creates UserTomo table
-    cursor.execute("""CREATE TABLE UserTomo(TomoID INTEGER PRIMARY KEY, Name VARCHAR(45) NOT NULL, HP INTEGER NOT NULL, XP INTEGER NOT NULL, BondLevel INTEGER NOT NULL, LastBehaviour VARCHAR,
+    # creates UserTomo table and populates with two Tomos (named RockFriend and TomaTomo)
+    cursor.executescript("""CREATE TABLE UserTomo(TomoID INTEGER PRIMARY KEY, Name VARCHAR(45) NOT NULL, HP INTEGER NOT NULL, XP INTEGER NOT NULL, BondLevel INTEGER NOT NULL, LastBehaviour VARCHAR,
                    FOREIGN KEY (TomoID) REFERENCES TomoStats(ID));
                    INSERT INTO UserTomo VALUES(1,'RockFriend',100,0,1,'idle');
                    INSERT INTO UserTomo VALUES(2,'TomaTomo',300,0,1,'idle');""")
