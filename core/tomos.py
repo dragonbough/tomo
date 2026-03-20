@@ -239,7 +239,7 @@ class Tomo():
                 self.fsm.current_state.execute(self.fsm.current_state.name)
 
     # checks for whether any requirements have been met to pass in a certain input into the finite state machine
-    def check_for_fsm_input(self, tomo : Tomo = None):
+    def check_for_fsm_input(self, tomo : "Tomo" = None):
 
         # each tomo_topic event will pass the tomo as argument. if this tomo is not us, we shouldn't be affected
         if tomo != self:
