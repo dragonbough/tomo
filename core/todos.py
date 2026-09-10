@@ -341,7 +341,7 @@ if __name__ == "__main__":
                         todo_difficulty = -1
                         while not(1 <= todo_difficulty <= 4):
                             todo_difficulty = int(input("Edit To-do Difficulty: [1] Trivial  [2] Easy  [3] Normal  [4] Hard\n"))
-                        user_todo_list.set_todo_difficulty(selected_todo.difficulty, todo_difficulty)
+                        user_todo_list.set_todo_difficulty(selected_todo, todo_difficulty)
 
                     elif edit_option == "d":
                         clear_screen()
@@ -384,7 +384,7 @@ if __name__ == "__main__":
                     choice = None
                     time_created = datetime.fromtimestamp(selected_todo.time_created).strftime("%Y/%m/%d, %H:%M:%S")
                     time_completed = datetime.fromtimestamp(selected_todo.time_completed).strftime("%Y/%m/%d, %H:%M:%S") if selected_todo.time_completed else None
-                    difficulties = ["Trivial", "Easy", "Hard", "Very Hard"]
+                    difficulties = ["Trivial", "Easy", "Normal", "Hard"]
 
                     while choice != "f":
 

@@ -10,6 +10,7 @@ class IteratingTimer(Timer):
         super().__init__(interval, function, args, kwargs)
         # attribute determining whether to carry out iteration function or not
         self.paused = Event()
+        self.daemon = True
 
     def run(self):
         # while the "finished" event isnt over, carry out function if not paused
