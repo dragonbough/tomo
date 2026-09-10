@@ -6,3 +6,6 @@
 *.db-shm
 *.db-wal
 /.vscode
+pyproject.toml
+uv.lock
+.python-version
